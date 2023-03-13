@@ -1,0 +1,3 @@
+[submodule "dep/sol-core"]
+	path = dep/sol-core
+	url = git@gitlab.swind.sk:sol/sol-core.git

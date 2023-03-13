@@ -1,6 +1,6 @@
 use std::collections::HashMap;
+use tokio::net::tcp::{ReadHalf, WriteHalf};
 use tokio::sync::{oneshot, broadcast, Mutex};
-use tokio::net::{TcpStream};
 use tokio::io::{AsyncWriteExt, AsyncReadExt};
 use log::{warn, info, error};
 
@@ -9,9 +9,9 @@ use crate::{ptlink, ptlink::connection::magic_t };
 
 #[derive(Debug,Clone)]
 pub struct Message {
-    port: i32,
-    header: ptlink::connection::Header,
-    payload: Vec<u8>
+    pub port: i32,
+    pub header: ptlink::connection::Header,
+    pub payload: Vec<u8>
 }
 
 // Function that converts to byte array. (found on stackoverflow)
@@ -24,36 +24,56 @@ unsafe fn any_as_u8_slice_mut<T: Sized>(p: &mut T) -> &mut [u8] {
 }
 
 
-struct SharedState {
+pub struct SharedState {
     id_gen: u16,
     request_map: HashMap<u16, oneshot::Sender<u16>>
 }
 
-pub struct ClientConnection<'a> {
-    stream: &'a mut TcpStream,
-    lock: Mutex<SharedState>,
-    pub broadcast: broadcast::Receiver<Message>,
-    sender: broadcast::Sender<Message>
+pub struct ClientConnection {
+    /// shared state lock
+    pub lock: Mutex<SharedState>,
+    /// used internally to broadcast server messages
+    sender: broadcast::Sender<Message>,
+    /// broadcasts server messages
+    pub broadcast: broadcast::Receiver<Message>
 }
 
-impl<'a> ClientConnection<'a> {
-    pub fn new(stream: &'a mut TcpStream) -> Self {
+impl ClientConnection {
+    pub fn new() -> Self {
         let (sender, mut receiver) = broadcast::channel::<Message>(128);
         ClientConnection {
-            stream: stream,
             lock: Mutex::new(SharedState { id_gen: 0, request_map: HashMap::new() }),
-            broadcast: receiver,
-            sender: sender
+            sender: sender,
+            broadcast: receiver
+
+        }
+    }
+}
+
+pub struct ClientConnectionSender<'a> {
+    conn: &'a ClientConnection,
+    guarded_writer: &'a Mutex<WriteHalf<'a>>
+}
+
+impl<'a> ClientConnectionSender<'a> {
+    pub fn new(conn: &'a ClientConnection, guarded_writer: &'a Mutex<WriteHalf<'a>>) -> Self {
+        ClientConnectionSender {
+            conn: conn,
+            guarded_writer: guarded_writer
         }
     }
 
-    pub async fn send_message(&mut self, msg: &Message) -> Result<oneshot::Receiver<u16>, Box<dyn std::error::Error>> {
+    pub async fn send_message(&self, msg: &Message) -> Result<oneshot::Receiver<u16>, Box<dyn std::error::Error>> {
+        let mut ss = self.conn.lock.lock().await;
+
         let raw_msg = ptlink::connection::Message {
-            id: 0,
+            id: ss.id_gen,
             iPort: msg.port,
             header: msg.header,
             payloadLength: msg.payload.len() as u8,
         };
+        ss.id_gen += 1;
+
         let magic_slice: &[u8];
         let msg_slice: &[u8];
 
@@ -63,20 +83,32 @@ impl<'a> ClientConnection<'a> {
         }
 
         let (sender, receiver) = oneshot::channel::<u16>();
+
         {
-            let mut ss = self.lock.lock().await;
+            let mut writer = self.guarded_writer.lock().await;
 
-            self.stream.write_all(magic_slice).await?;
-            self.stream.write_all(msg_slice).await?;
-            self.stream.write_all(&msg.payload).await?;
-
-            let id = ss.id_gen;
-            ss.id_gen += 1;
-
-            ss.request_map.insert(id, sender);
+            writer.write_all(magic_slice).await?;
+            writer.write_all(msg_slice).await?;
+            writer.write_all(&msg.payload).await?;
         }
 
+        ss.request_map.insert(raw_msg.id, sender);
+
         Ok(receiver)
+    }
+}
+
+pub struct ClientConnectionDispatcher<'a> {
+    conn: &'a ClientConnection,
+    reader: &'a mut ReadHalf<'a>
+}
+
+impl<'a> ClientConnectionDispatcher<'a> {
+    pub fn new(conn: &'a ClientConnection, reader: &'a mut ReadHalf<'a>) -> Self {
+        ClientConnectionDispatcher {
+            conn: conn,
+            reader: reader
+        }
     }
 
     pub async fn dispatch(&mut self) -> Result<(), Box<dyn std::error::Error>> {
@@ -88,7 +120,7 @@ impl<'a> ClientConnection<'a> {
                 magic_slice = any_as_u8_slice_mut(&mut magic);
             }
 
-            self.stream.read_exact(&mut magic_slice).await?;
+            self.reader.read_exact(&mut magic_slice).await?;
             match magic {
                 MAGIC_RESULT => self.dispatch_result().await,
                 MAGIC_SERVER_MESSAGE => self.dispatch_server_message().await,
@@ -108,10 +140,10 @@ impl<'a> ClientConnection<'a> {
             result_slice = any_as_u8_slice_mut(&mut result);
         }
 
-        self.stream.read_exact(&mut result_slice).await?;
+        self.reader.read_exact(&mut result_slice).await?;
 
         {
-            let mut ss = self.lock.lock().await;
+            let mut ss = self.conn.lock.lock().await;
 
             match ss.request_map.remove(&result.msgId) {
                 Some(sender) => sender.send(result.result).unwrap(),
@@ -134,12 +166,12 @@ impl<'a> ClientConnection<'a> {
             msg_slice = any_as_u8_slice_mut(&mut raw_msg);
         }
 
-        self.stream.read_exact(msg_slice).await?;
+        self.reader.read_exact(msg_slice).await?;
 
         let mut pay: Vec<u8> = Vec::new();
         pay.resize(usize::from(raw_msg.payloadLength), 0);
 
-        self.stream.read_exact(pay.as_mut_slice()).await?;
+        self.reader.read_exact(pay.as_mut_slice()).await?;
 
         let msg = Message {
             port: raw_msg.iPort as i32,
@@ -147,7 +179,7 @@ impl<'a> ClientConnection<'a> {
             payload: pay
         };
 
-        self.sender.send(msg).unwrap();
+        self.conn.sender.send(msg).unwrap();
 
         Ok(())
     }
