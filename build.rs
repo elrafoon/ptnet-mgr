@@ -4,8 +4,6 @@ use std::path::{PathBuf, Path};
 use std::fs;
 
 use bindgen::callbacks;
-use schema_resolve::resolve;
-//use typify::{TypeSpace, TypeSpaceSettings};
 
 #[derive(Debug)]
 pub struct DeriveCallback {
@@ -81,68 +79,9 @@ fn wrap_ptlink(component: &str) {
         .expect("Couldn't write bindings!");
 }
 
-fn resolve_sol_core_schema(schema_file_name: &str) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let schema_dir =
-        PathBuf::from(env::var("CARGO_MANIFEST_DIR")?)
-        .join("dep")
-        .join("sol-core")
-        .join("schema");
-
-    let mut schema_index: HashMap<String, serde_json::Value> = HashMap::new();
-
-    for dir in fs::read_dir(schema_dir)? {
-        let entry = dir?;
-        let os_fname = entry.file_name();
-        let fname = os_fname.as_os_str().to_str().unwrap();
-        if fname.ends_with(".json") {
-            let file = fs::File::open(entry.path())?;
-            let schema = serde_json::from_reader(file)?;
-            schema_index.insert(String::from(fname), schema);
-        }
-    }
-
-    let schema = schema_index.get(schema_file_name).unwrap();
-
-    let resolved_schema = resolve(&schema, &schema_index, true)?;
-
-    let mut out_path = Path::new(&env::var("OUT_DIR").unwrap()).to_path_buf();
-    out_path.push("schema");
-    fs::create_dir_all(&out_path)?;
-
-    out_path.push(schema_file_name);
-    let out_file = fs::File::create(&out_path)?;
-    serde_json::to_writer(out_file, &resolved_schema)?;
-
-    Ok(out_path)
-}
-
-fn wrap_sol_core_schema(schema_path: &PathBuf, root_type: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let contents = format!("
-schemafy::schemafy!(
-    root: {}
-    \"{}\"
-);",
-        root_type,
-        schema_path.as_os_str().to_str().unwrap()
-    );
-
-    let mut out_file = schema_path.clone();
-    out_file.set_extension("rs");
-    fs::write(out_file, contents).unwrap();
-
-    Ok(())
-}
-
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     wrap_ptlink("ptnet");
     wrap_ptlink("ptlink_connection");
-
-    println!("cargo:rerun-if-changed=dep/sol-core/schema/*.json");
-    let res_sol_model_json = resolve_sol_core_schema("sol.model.json")?;
-    wrap_sol_core_schema(&res_sol_model_json, "Solmodel")?;
-
-    let res_sol_user_json = resolve_sol_core_schema("sol.user.json")?;
-    wrap_sol_core_schema(&res_sol_user_json, "Soluser")?;
 
     Ok(())
 }

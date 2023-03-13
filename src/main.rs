@@ -12,10 +12,10 @@ mod database;
 mod schema;
 mod ptnet_process;
 mod nodescan_process;
+mod helpers;
 
 use client_connection::{ClientConnection};
 use database::{Database};
-use schema::{Soluser};
 
 use crate::{client_connection::{ClientConnectionDispatcher, ClientConnectionSender}, database::NodeRecord};
 
@@ -54,7 +54,7 @@ impl Configuration {
     }
 }
 
-async fn client_connect<'a>(conf: &Configuration, sol_user: &Soluser, db: &Database<'a>) -> Result<(), Box<dyn std::error::Error>>
+async fn client_connect<'a>(conf: &Configuration, sol_user: &schema::UserModel, db: &Database<'a>) -> Result<(), Box<dyn std::error::Error>>
 {
     let addr = std::net::SocketAddr::from_str(&conf.server_address)?;
     let t_reconnect = conf.reconnect_duration();
@@ -111,6 +111,8 @@ async fn client_connect<'a>(conf: &Configuration, sol_user: &Soluser, db: &Datab
     };
 }
 
+
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("debug")).init();
@@ -125,7 +127,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut sol_user_path = PathBuf::from(&conf.sol_model_root);
     sol_user_path.push("sol.user.json");
     info!("Loading SOL user model from {}", sol_user_path.as_os_str().to_str().unwrap());
-    let soluser: Soluser = serde_json::from_reader(fs::File::open(sol_user_path)?)?;
+    let soluser: schema::UserModel = serde_json::from_reader(fs::File::open(sol_user_path)?)?;
     info!("Model loaded");
 
     info!("Loading sol-mgr database");
@@ -136,25 +138,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("Database loaded");
 
     if let Some(network) = soluser.network.as_ref() {
-        let ballasts = &network.ballasts;
         let nodes = &db.nodes;
-        let new_nodes: Vec<NodeRecord> = ballasts.iter()
-            .map(|ballast| {
-                let o = ballast.as_object().unwrap();
-                let s_address = o.get("address").unwrap().as_str().unwrap();
-                let mut uid: Vec<u8> = s_address.split(":").map(|x| u8::from_str_radix(x, 16).unwrap()).collect();
-                uid.insert(0, 0);
-                uid.insert(0, 0);
-                let address: [u8; 6] = uid.try_into().unwrap();
-                address
-            })
-            .filter(|address| !nodes.contains_key(address))
-            .map(|address| {
-                let mut node: NodeRecord = Default::default();
-                node.address = address;
-                node
-            })
-            .collect();
+        let mut new_nodes: Vec<NodeRecord> =
+            network.ballasts.iter()
+                .map(|ballast| helpers::parse_user_address(ballast.address.as_str()).unwrap())
+                .filter(|address| !nodes.contains_key(address))
+                .map(|address| NodeRecord { address: address, ..Default::default() })
+                .collect();
+
+        new_nodes.extend(
+            network.sensors.iter()
+                .filter(|e| e.part_of.is_none())
+                .map(|sensor| helpers::parse_user_address(sensor.address.as_str()).unwrap())
+                .filter(|address| !nodes.contains_key(address))
+                .map(|address| NodeRecord { address: address, ..Default::default() })
+        );
 
         info!("Adding {} new nodes", new_nodes.len());
         db.add_nodes(new_nodes.iter())?;
