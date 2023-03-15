@@ -154,8 +154,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .map(|address| NodeRecord { address: address, ..Default::default() })
         );
 
-        info!("Adding {} new nodes", new_nodes.len());
+        info!("Add {} new nodes", new_nodes.len());
         db.add_nodes(new_nodes.iter())?;
+
+        let sz = db.nodes.len();
+        db.nodes.retain(|k, e| {
+            network.ballasts.iter().any(|b| *k == helpers::parse_user_address(b.address.as_str()).unwrap()) ||
+            network.sensors.iter().any(|s| *k == helpers::parse_user_address(s.address.as_str()).unwrap())
+        });
+        info!("Remove {} non-existent nodes", sz - db.nodes.len());
     }
 
     client_connect(
