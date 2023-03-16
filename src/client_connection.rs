@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use tokio::net::tcp::{ReadHalf, WriteHalf};
 use tokio::sync::{oneshot, broadcast, Mutex};
 use tokio::io::{AsyncWriteExt, AsyncReadExt};
-use log::{warn, info, error};
+use log::{warn};
 
 use crate::ptnet::{ptnet_c, MAGIC_RESULT, MAGIC_SERVER_MESSAGE};
 

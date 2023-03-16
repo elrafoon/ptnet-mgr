@@ -12,7 +12,7 @@ const TABLE: redb::TableDefinition<&NodeAddress, &RawValue> = redb::TableDefinit
 #[derive(Debug,Serialize,Deserialize,Clone,Default)]
 pub struct NodeRecord {
     pub address: NodeAddress,
-    pub deviceStatus: Option<ptlink::ptnet::M_DEV_ST>
+    pub device_status: Option<ptnet_c::M_DEV_ST>
 }
 
 impl NodeRecord {
@@ -41,7 +41,7 @@ impl<'a> Database<'a> {
     pub fn init(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let txn = self.db.begin_write()?;
         {
-            let mut table = txn.open_table(TABLE)?;
+            let _table = txn.open_table(TABLE)?;
         }
         txn.commit()?;
 
@@ -89,7 +89,7 @@ impl<'a> Database<'a> {
     }
 
     pub fn add_node(&mut self, rec: &NodeRecord) -> Result<(), Box<dyn std::error::Error>> {
-        if let Some(node) = self.nodes.get(&rec.address) {
+        if let Some(_node) = self.nodes.get(&rec.address) {
             return Err(Box::new(io::Error::new(
                 io::ErrorKind::AlreadyExists,
                 format!("Node {} already exists", rec.mac())
@@ -106,7 +106,7 @@ impl<'a> Database<'a> {
         T: Iterator<Item = &'b NodeRecord> + Clone,
     {
         for rec in it.clone() {
-            if let Some(node) = self.nodes.get(&rec.address) {
+            if let Some(_node) = self.nodes.get(&rec.address) {
                 return Err(Box::new(io::Error::new(
                     io::ErrorKind::AlreadyExists,
                     format!("Node {} already exists", rec.mac())

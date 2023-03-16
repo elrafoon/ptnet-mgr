@@ -1,6 +1,6 @@
 use std::{str::FromStr, fs, path::PathBuf};
 
-use futures::future::{join_all, try_join_all};
+use futures::future::{try_join_all};
 use serde::{Serialize, Deserialize};
 use tokio::{time::{Duration, sleep}, net::{TcpStream, tcp::WriteHalf}, sync::Mutex};
 use log::{warn, info, error};
@@ -54,7 +54,7 @@ impl Configuration {
     }
 }
 
-async fn client_connect<'a>(conf: &Configuration, sol_user: &schema::UserModel, db: &Database<'a>) -> Result<(), Box<dyn std::error::Error>>
+async fn client_connect<'a>(conf: &Configuration, _sol_user: &schema::UserModel, db: &Database<'a>) -> Result<(), Box<dyn std::error::Error>>
 {
     let addr = std::net::SocketAddr::from_str(&conf.server_address)?;
     let t_reconnect = conf.reconnect_duration();
@@ -158,7 +158,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         db.add_nodes(new_nodes.iter())?;
 
         let sz = db.nodes.len();
-        db.nodes.retain(|k, e| {
+        db.nodes.retain(|k, _e| {
             network.ballasts.iter().any(|b| *k == helpers::parse_user_address(b.address.as_str()).unwrap()) ||
             network.sensors.iter().any(|s| *k == helpers::parse_user_address(s.address.as_str()).unwrap())
         });

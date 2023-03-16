@@ -11,21 +11,18 @@ pub struct Network {
     pub sensors: Vec<Sensor>
 }
 
-pub type NodeId = String;
-pub type TypeId = String;
-
 #[derive(Clone,Debug,Deserialize)]
 pub struct Ballast {
-    pub address: NodeId,
+    pub address: String,
     #[serde(rename="type")]
-    pub type_id: TypeId,
+    pub type_id: String,
     pub name: String,
 }
 
 #[derive(Clone,Debug,Deserialize)]
 pub struct Sensor {
-    pub address: NodeId,
-    pub type_id: TypeId,
+    pub address: String,
+    pub type_id: String,
     pub name: String,
-    pub part_of: Option<NodeId>
+    pub part_of: Option<String>
 }
