@@ -160,7 +160,15 @@ pub enum IE {
     TI147(ptnet_c::TI147),
 
     /// system information in monitor direction
-    TI232(ptnet_c::TI232)
+    TI232(ptnet_c::TI232),
+
+    /// system information in control direction
+    TI16(ptnet_c::TI16),
+    TI25(ptnet_c::TI25),
+    TI56(ptnet_c::TI56),
+    TI90(ptnet_c::TI90),
+    TI219(ptnet_c::TI219),
+    TI240(ptnet_c::TI240)
 }
 
 pub enum IEParseError {
@@ -204,6 +212,13 @@ impl TryFrom<(/* tc: */ u8, /* buffer: */ &[u8])> for IE {
             147 => Ok(IE::TI147(IE::parse_from(value.1)?)),
 
             232 => Ok(IE::TI232(IE::parse_from(value.1)?)),
+
+            16 => Ok(IE::TI16(IE::parse_from(value.1)?)),
+            25 => Ok(IE::TI25(IE::parse_from(value.1)?)),
+            56 => Ok(IE::TI56(IE::parse_from(value.1)?)),
+            90 => Ok(IE::TI90(IE::parse_from(value.1)?)),
+            219 => Ok(IE::TI219(IE::parse_from(value.1)?)),
+            240 => Ok(IE::TI240(IE::parse_from(value.1)?)),
 
             _ => Ok(IE::Unknown(value.1.to_vec()))
         }

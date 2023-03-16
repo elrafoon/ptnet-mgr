@@ -80,4 +80,10 @@ pub mod ptnet_c {
             self.ti == other.ti && self.vsq == other.vsq
         }
     }
+
+    impl PartialEq for super::TI25 {
+        fn eq(&self, other: &Self) -> bool {
+            true
+        }
+    }
 }
