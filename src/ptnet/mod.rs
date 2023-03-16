@@ -82,7 +82,7 @@ pub mod ptnet_c {
     }
 
     impl PartialEq for super::TI25 {
-        fn eq(&self, other: &Self) -> bool {
+        fn eq(&self, _other: &Self) -> bool {
             true
         }
     }
