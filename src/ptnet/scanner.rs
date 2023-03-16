@@ -29,7 +29,7 @@ pub struct Scanner<'a> {
     dui: DUI
 }
 
-#[derive(Debug)]
+#[derive(Debug,PartialEq)]
 pub enum Error<'a> {
     /// EOF reached, packet parsed
     EOF,
@@ -203,6 +203,8 @@ mod tests {
             let next_token = scanner.next_token().unwrap();
             assert_eq!(next_token, *tok);
         }
+
+        assert_eq!(scanner.next_token(), Result::Err(Error::EOF));
     }
 
     #[test]
@@ -218,6 +220,8 @@ mod tests {
             let next_token = scanner.next_token().unwrap();
             assert_eq!(next_token, *tok);
         }
+
+        assert_eq!(scanner.next_token(), Result::Err(Error::EOF));
     }
 
     #[test]
@@ -245,5 +249,7 @@ mod tests {
             let next_token = scanner.next_token().unwrap();
             assert_eq!(next_token, *tok);
         }
+
+        assert_eq!(scanner.next_token(), Result::Err(Error::EOF));
     }
 }
