@@ -4,13 +4,12 @@ use tokio::sync::{oneshot, broadcast, Mutex};
 use tokio::io::{AsyncWriteExt, AsyncReadExt};
 use log::{warn, info, error};
 
-use crate::ptlink::connection::{MAGIC_RESULT, MAGIC_SERVER_MESSAGE};
-use crate::{ptlink, ptlink::connection::magic_t };
+use crate::ptnet::{ptnet_c, MAGIC_RESULT, MAGIC_SERVER_MESSAGE};
 
 #[derive(Debug,Clone)]
 pub struct Message {
     pub port: i32,
-    pub header: ptlink::connection::Header,
+    pub header: ptnet_c::Header,
     pub payload: Vec<u8>
 }
 
@@ -66,7 +65,7 @@ impl<'a> ClientConnectionSender<'a> {
     pub async fn send_message(&self, msg: &Message) -> Result<oneshot::Receiver<u16>, Box<dyn std::error::Error>> {
         let mut ss = self.conn.lock.lock().await;
 
-        let raw_msg = ptlink::connection::Message {
+        let raw_msg = ptnet_c::Message {
             id: ss.id_gen,
             iPort: msg.port,
             header: msg.header,
@@ -78,7 +77,7 @@ impl<'a> ClientConnectionSender<'a> {
         let msg_slice: &[u8];
 
         unsafe {
-            magic_slice = any_as_u8_slice(&ptlink::connection::MAGIC_MESSAGE);
+            magic_slice = any_as_u8_slice(&ptnet_c::MAGIC_MESSAGE);
             msg_slice = any_as_u8_slice(&raw_msg);
         }
 
@@ -113,7 +112,7 @@ impl<'a> ClientConnectionDispatcher<'a> {
 
     pub async fn dispatch(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         loop {
-            let mut magic: magic_t = 0;
+            let mut magic: ptnet_c::magic_t = 0;
             let mut magic_slice: &mut [u8];
 
             unsafe {
@@ -133,7 +132,7 @@ impl<'a> ClientConnectionDispatcher<'a> {
     }
 
     async fn dispatch_result(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        let mut result = ptlink::connection::MessageResult { msgId: 0, result: 0 };
+        let mut result = ptnet_c::MessageResult { msgId: 0, result: 0 };
         let mut result_slice: &mut [u8];
 
         unsafe {
@@ -155,9 +154,9 @@ impl<'a> ClientConnectionDispatcher<'a> {
     }
 
     async fn dispatch_server_message(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        let mut raw_msg = ptlink::connection::ServerMessage {
+        let mut raw_msg = ptnet_c::ServerMessage {
             iPort: 0,
-            header: ptlink::connection::Header { C: 0, address: [0; 6] },
+            header: ptnet_c::Header { C: 0, address: [0; 6] },
             payloadLength: 0
         };
         let msg_slice: &mut [u8];

@@ -2,7 +2,7 @@ use std::{collections::HashMap, io, iter::Iterator};
 
 use redb::ReadableTable;
 use serde::{Serialize, Deserialize};
-use crate::{ptlink};
+use crate::ptnet::ptnet_c;
 
 type NodeAddress = [u8; 6];
 type RawValue = [u8];

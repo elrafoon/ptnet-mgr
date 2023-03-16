@@ -5,7 +5,13 @@ use futures::future::BoxFuture;
 use log::{info, debug};
 use tokio::{time::{interval}, task::{JoinHandle, self}};
 
-use crate::{ptnet_process::PtNetProcess, database::{Database, NodeRecord}, client_connection::{ClientConnection, Message, ClientConnectionSender}, ptlink::connection::{PORT_AUTO, Header, BIT_PRM, FC_PRM_SEND_NOREPLY}};
+use crate::{database::{Database, NodeRecord}};
+use crate::ptnet::*;
+use crate::ptnet::ptnet_c;
+use crate::client_connection::{ClientConnection, Message, ClientConnectionSender};
+use crate::ptnet_process::{PtNetProcess};
+
+use crate::ptnet::ptnet_c::{BIT_PRM, FC_PRM_SEND_NOREPLY};
 
 pub struct NodeScanProcess<'a> {
     scan_period: Duration,

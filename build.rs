@@ -1,7 +1,5 @@
-use std::collections::HashMap;
 use std::env;
-use std::path::{PathBuf, Path};
-use std::fs;
+use std::path::{PathBuf};
 
 use bindgen::callbacks;
 
@@ -59,6 +57,9 @@ fn wrap_ptlink(component: &str) {
         // The input header we would like to generate
         // bindings for.
         .header(wrapper)
+        .derive_default(true)
+        .derive_debug(true)
+        .derive_partialeq(true)
         // Tell cargo to invalidate the built crate whenever any of the
         // included header files changed.
         .parse_callbacks(Box::new(bindgen::CargoCallbacks))
@@ -81,7 +82,5 @@ fn wrap_ptlink(component: &str) {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     wrap_ptlink("ptnet");
-    wrap_ptlink("ptlink_connection");
-
     Ok(())
 }
