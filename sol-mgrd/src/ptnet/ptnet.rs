@@ -1,6 +1,8 @@
 use std::mem::size_of;
 
-use super::{ptnet_c, helpers::any_as_u8_slice_mut};
+use sol_lib::helpers::any_as_u8_slice_mut;
+
+use super::{ptnet_c};
 
 #[repr(u8)]
 #[allow(non_camel_case_types)]
