@@ -11,13 +11,12 @@ mod client_connection;
 mod database;
 mod schema;
 mod ptnet_process;
-mod nodescan_process;
 mod helpers;
 
 use client_connection::{ClientConnection};
 use database::{Database};
 
-use crate::{client_connection::{ClientConnectionDispatcher, ClientConnectionSender}, database::NodeRecord};
+use crate::{client_connection::{ClientConnectionDispatcher, ClientConnectionSender}, database::NodeRecord, ptnet_process::NodeScanProcess};
 
 /// SOL background processing daemon
 #[derive(Parser,Debug)]
@@ -84,7 +83,7 @@ async fn client_connect<'a>(conf: &Configuration, _sol_user: &schema::UserModel,
 
         info!("Init connection");
         let mut processes: Vec<Box<dyn ptnet_process::PtNetProcess>> = vec![
-            Box::new(nodescan_process::NodeScanProcess::new(
+            Box::new(NodeScanProcess::new(
                 Duration::from_secs(10),
                 db,
                 &conn,
