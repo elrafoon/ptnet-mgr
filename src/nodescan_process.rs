@@ -1,9 +1,8 @@
 use std::{time::Duration};
 use async_trait::async_trait;
 
-use futures::future::BoxFuture;
-use log::{info, debug};
-use tokio::{time::{interval}, task::{JoinHandle, self}};
+use log::{info, debug, warn};
+use tokio::{time::{interval, sleep}, sync::broadcast, select};
 
 use crate::{database::{Database, NodeRecord}};
 use crate::ptnet::*;
@@ -17,7 +16,8 @@ pub struct NodeScanProcess<'a> {
     scan_period: Duration,
     db: &'a Database<'a>,
     conn: &'a ClientConnection,
-    sender: &'a ClientConnectionSender<'a>
+    sender: &'a ClientConnectionSender<'a>,
+    message_rcvr: broadcast::Receiver<Message>
 }
 
 #[async_trait]
@@ -45,7 +45,8 @@ impl<'a> NodeScanProcess<'a> {
             scan_period: scan_period,
             db: db,
             conn: conn,
-            sender: sender
+            sender: sender,
+            message_rcvr: conn.subscribe()
         }
     }
 

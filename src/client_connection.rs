@@ -32,20 +32,21 @@ pub struct ClientConnection {
     /// shared state lock
     pub lock: Mutex<SharedState>,
     /// used internally to broadcast server messages
-    sender: broadcast::Sender<Message>,
-    /// broadcasts server messages
-    pub broadcast: broadcast::Receiver<Message>
+    broadcast: broadcast::Sender<Message>,
 }
 
 impl ClientConnection {
     pub fn new() -> Self {
-        let (sender, mut receiver) = broadcast::channel::<Message>(128);
+        let (sender, _) = broadcast::channel::<Message>(128);
         ClientConnection {
             lock: Mutex::new(SharedState { id_gen: 0, request_map: HashMap::new() }),
-            sender: sender,
-            broadcast: receiver
+            broadcast: sender
 
         }
+    }
+
+    pub fn subscribe(&self) -> broadcast::Receiver<Message> {
+        self.broadcast.subscribe()
     }
 }
 
@@ -120,6 +121,7 @@ impl<'a> ClientConnectionDispatcher<'a> {
             }
 
             self.reader.read_exact(&mut magic_slice).await?;
+
             match magic {
                 MAGIC_RESULT => self.dispatch_result().await,
                 MAGIC_SERVER_MESSAGE => self.dispatch_server_message().await,
@@ -178,7 +180,7 @@ impl<'a> ClientConnectionDispatcher<'a> {
             payload: pay
         };
 
-        self.conn.sender.send(msg).unwrap();
+        self.conn.broadcast.send(msg).unwrap();
 
         Ok(())
     }
