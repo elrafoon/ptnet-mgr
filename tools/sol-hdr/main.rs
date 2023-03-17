@@ -57,8 +57,7 @@ impl std::fmt::Display for Error {
             Error::IOError(io_error) => { write!(f, "{}", io_error) },
             Error::HeaderNotPresent => { write!(f, "Header not present") },
             Error::ImageError(img_error) => { write!(f, "{}", img_error) },
-            Error::ParseError(parse_error) => { write!(f, "{}", parse_error) },
-            _ => { write!(f, "") }
+            Error::ParseError(parse_error) => { write!(f, "{}", parse_error) }
         }
     }
 }
