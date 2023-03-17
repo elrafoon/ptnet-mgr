@@ -56,7 +56,7 @@ impl<'a> NodeScanProcess<'a> {
         let msg;
         {
             let mut buf = packet::buffer::Dynamic::new();
-            PtNetPacket::with_asdh(&ptnet_c::ASDH::with(0, COT::REQ, false), &mut buf)?
+            PtNetPacket::with_asdh(&ptnet_c::ASDH::with(0x3E, COT::REQ, false), &mut buf)?
                 .begin_asdu(&ptnet_c::DUI::with_direct(ptnet_c::TC_C_RD, 1, false))?
                 .add_ioa(0)?
                 .end_asdu()?;
@@ -89,13 +89,8 @@ impl<'a> NodeScanProcess<'a> {
                         rsp = msg?;
                         debug!("Some response arrived");
 
-                        if rsp.header.prm() && rsp.header.address == node.address {
-                            if let Some(fc) = rsp.header.fc() {
-                                match fc {
-                                    FC::PrmSendConfirm | FC::PrmSendNoreply => { break 'rsp_loop; },
-                                    _ => {}
-                                }
-                            }
+                        if NodeScanProcess::match_rsp_ti232(&rsp, node) {
+                            break 'rsp_loop;
                         }
                         break;
                     },
@@ -110,5 +105,35 @@ impl<'a> NodeScanProcess<'a> {
         info!("Matching response arrived");
 
         Ok(())
+    }
+
+    fn match_rsp_ti232(rsp: &Message, node: &NodeRecord) -> bool {
+        if rsp.header.prm() && rsp.header.address == node.address {
+            if let Some(fc) = rsp.header.fc() {
+                match fc {
+                    FC::PrmSendConfirm | FC::PrmSendNoreply => {
+                        let mut scanner = Scanner::new(&rsp.payload[..]);
+                        let exp_tokens: &[Token] = &[
+                            Token::ASDH(ASDH::with(0x3E, COT::REQ, false)),
+                            Token::DUI(DUI::with_direct(232, 1, false))
+                        ];
+                        for exp_tok in exp_tokens {
+                            if let Ok(tok) = scanner.next_token() {
+                                if tok != *exp_tok {
+                                    return false;
+                                }
+                            } else {
+                                return false;
+                            }
+                        }
+
+                        return true;
+                    },
+                    _ => {}
+                }
+            }
+        }
+
+        false
     }
 }
