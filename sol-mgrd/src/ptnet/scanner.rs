@@ -10,12 +10,12 @@ enum State {
     ScanIE
 }
 
-#[derive(Copy,Clone,Debug,PartialEq)]
-pub enum Token<'a> {
+#[derive(Clone,Debug,PartialEq)]
+pub enum Token {
     ASDH(ASDH),
     DUI(DUI),
     IOA(IOA),
-    IE(IE<'a>)
+    IE(IE)
 }
 
 pub struct Scanner<'a> {
@@ -51,7 +51,7 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    pub fn next_token(&mut self) -> Result<Token<'a>, Error<'a>> {
+    pub fn next_token(&mut self) -> Result<Token, Error<'a>> {
         let rem = self.packet.len() - self.pos;
         match self.state {
             State::ScanASDH => {
@@ -153,7 +153,7 @@ impl<'a> Scanner<'a> {
 }
 
 impl<'a> IntoIterator for Scanner<'a> {
-    type Item = Result<Token<'a>, Error<'a>>;
+    type Item = Result<Token, Error<'a>>;
     type IntoIter = ScannerIntoIterator<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -168,7 +168,7 @@ pub struct ScannerIntoIterator<'a> {
 }
 
 impl<'a> Iterator for ScannerIntoIterator<'a> {
-    type Item = Result<Token<'a>, Error<'a>>;
+    type Item = Result<Token, Error<'a>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let res = self.scanner.next_token();
@@ -182,12 +182,12 @@ impl<'a> Iterator for ScannerIntoIterator<'a> {
     }
 }
 
-#[derive(Copy,Clone,Debug,PartialEq)]
-pub struct IOB<'a> {
+#[derive(Clone,Debug,PartialEq)]
+pub struct IOB {
     pub asdh: ASDH,
     pub dui: DUI,
     pub ioa: IOA,
-    pub ie: IE<'a>
+    pub ie: IE
 }
 
 pub struct ScannerIntoIOBIterator<'a> {
@@ -198,7 +198,7 @@ pub struct ScannerIntoIOBIterator<'a> {
 }
 
 impl<'a> Iterator for ScannerIntoIOBIterator<'a> {
-    type Item = Result<IOB<'a>, Error<'a>>;
+    type Item = Result<IOB, Error<'a>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -222,7 +222,7 @@ impl<'a> Iterator for ScannerIntoIOBIterator<'a> {
                                         asdh: asdh,
                                         dui: dui,
                                         ioa: ioa,
-                                        ie: *ie
+                                        ie: ie.clone()
                                     }));
                                 } else {
                                     return Some(Err(Error::InvalidPacket("Missing IOA")));
@@ -361,7 +361,7 @@ mod tests {
 
         let iter_exp: Vec<Token> = asdh_dui.iter()
             .chain(PKT1_EXP_FROM_IOA.iter())
-            .map(|e| *e)
+            .map(|e| e.clone())
             .collect();
         let iter_scn: Vec<Token> = scanner.into_iter()
             .map(|res| res.unwrap())
@@ -434,7 +434,7 @@ mod tests {
 
         let iter_exp: Vec<IOB> = pkt_1_exp_iobs.iter()
             .chain(pkt_2_exp_iobs.iter())
-            .map(|e| *e)
+            .map(|e| e.clone())
             .collect();
         let iter_scn: Vec<IOB> = scanner.into_iob_iter()
             .map(|res| res.unwrap())
