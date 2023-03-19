@@ -138,9 +138,9 @@ impl VSQBits for ptnet_c::VSQ {
     fn sq(&self) -> bool { unsafe { self.__bindgen_anon_1.sq() != 0 } }
 }
 
-#[derive(Debug,PartialEq)]
-pub enum IE {
-    Unknown(Vec<u8>),
+#[derive(Clone,Copy,Debug,PartialEq)]
+pub enum IE<'a> {
+    Unknown(&'a [u8]),
 
     /// Measured valued
     TI32(ptnet_c::TI32),
@@ -166,7 +166,7 @@ pub enum IE {
 
     /// system information in control direction
     TI16(ptnet_c::TI16),
-    TI25(ptnet_c::TI25),
+    TI25,
     TI56(ptnet_c::TI56),
     TI90(ptnet_c::TI90),
     TI219(ptnet_c::TI219),
@@ -177,7 +177,7 @@ pub enum IEParseError {
     BufferTooShort
 }
 
-impl IE {
+impl<'a> IE<'a> {
     fn parse_from<T: Sized + Default>(buffer: &[u8]) -> Result<T, IEParseError> {
         if buffer.len() < size_of::<T>() {
             return Err(IEParseError::BufferTooShort);
@@ -191,10 +191,10 @@ impl IE {
     }
 }
 
-impl TryFrom<(/* tc: */ u8, /* buffer: */ &[u8])> for IE {
+impl<'a> TryFrom<(/* tc: */ u8, /* buffer: */ &'a [u8])> for IE<'a> {
     type Error = IEParseError;
 
-    fn try_from(value: (/* tc: */ u8, /* buffer: */ &[u8])) -> Result<Self, Self::Error> {
+    fn try_from(value: (/* tc: */ u8, /* buffer: */ &'a [u8])) -> Result<Self, Self::Error> {
         match value.0 {
             32 => Ok(IE::TI32(IE::parse_from(value.1)?)),
             33 => Ok(IE::TI33(IE::parse_from(value.1)?)),
@@ -216,13 +216,13 @@ impl TryFrom<(/* tc: */ u8, /* buffer: */ &[u8])> for IE {
             232 => Ok(IE::TI232(IE::parse_from(value.1)?)),
 
             16 => Ok(IE::TI16(IE::parse_from(value.1)?)),
-            25 => Ok(IE::TI25(IE::parse_from(value.1)?)),
+            25 => Ok(IE::TI25),
             56 => Ok(IE::TI56(IE::parse_from(value.1)?)),
             90 => Ok(IE::TI90(IE::parse_from(value.1)?)),
             219 => Ok(IE::TI219(IE::parse_from(value.1)?)),
             240 => Ok(IE::TI240(IE::parse_from(value.1)?)),
 
-            _ => Ok(IE::Unknown(value.1.to_vec()))
+            _ => Ok(IE::Unknown(value.1))
         }
     }
 }
