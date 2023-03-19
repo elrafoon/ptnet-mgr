@@ -184,10 +184,10 @@ impl<'a> Iterator for ScannerIntoIterator<'a> {
 
 #[derive(Copy,Clone,Debug,PartialEq)]
 pub struct IOB<'a> {
-    asdh: ASDH,
-    dui: DUI,
-    ioa: IOA,
-    ie: IE<'a>
+    pub asdh: ASDH,
+    pub dui: DUI,
+    pub ioa: IOA,
+    pub ie: IE<'a>
 }
 
 pub struct ScannerIntoIOBIterator<'a> {
