@@ -71,10 +71,8 @@ impl<'a> Database<'a> {
         let table = txn.open_table(TABLE)?;
         let rec = table.get(address)?;
         match rec {
-            None =>
-                Ok(None),
-            Some(cbor) =>
-                Ok(Some(serde_cbor::from_slice(cbor.value()).unwrap()))
+            None => Ok(None),
+            Some(cbor) => Ok(Some(serde_cbor::from_slice(cbor.value()).unwrap()))
         }
     }
 
@@ -86,6 +84,31 @@ impl<'a> Database<'a> {
             let rec = cbor.as_slice();
             table.insert(address, rec)?;
         }
+        txn.commit()?;
+        Ok(())
+    }
+
+    pub fn modify_node<T>(&self, address: &NodeAddress, cb: T) -> Result<(), Box<dyn std::error::Error>>
+    where
+        T: FnOnce(Option<NodeRecord>) -> Option<NodeRecord>
+    {
+        let txn = self.db.begin_write()?;
+
+        {
+            let mut table = txn.open_table(TABLE)?;
+            let rec: Option<NodeRecord> = match table.get(address)? {
+                None => None,
+                Some(cbor) => Some(serde_cbor::from_slice(cbor.value()).unwrap())
+            };
+
+            match cb(rec) {
+                None => return Ok(()),
+                Some(rec) => {
+                    table.insert(address, serde_cbor::to_vec(&rec)?.as_slice())?;
+                }
+            }
+        }
+
         txn.commit()?;
         Ok(())
     }

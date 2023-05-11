@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use log::{info, debug, warn};
 use tokio::{time::{interval, sleep}, sync::broadcast, select};
 
-use crate::{database::{Database, NodeRecord}};
+use crate::{database::{Database, NodeRecord}, client_connection::IOBMessage};
 use crate::ptnet::*;
 use crate::ptnet::ptnet_c;
 use crate::client_connection::{ClientConnection, Message, ClientConnectionSender};
@@ -17,7 +17,7 @@ pub struct NodeScanProcess<'a> {
     db: &'a Database<'a>,
     conn: &'a ClientConnection,
     sender: &'a ClientConnectionSender<'a>,
-    message_rcvr: broadcast::Receiver<Message>
+    message_rcvr: broadcast::Receiver<IOBMessage>
 }
 
 #[async_trait]
@@ -46,7 +46,7 @@ impl<'a> NodeScanProcess<'a> {
             db: db,
             conn: conn,
             sender: sender,
-            message_rcvr: conn.subscribe()
+            message_rcvr: conn.subscribe_iob()
         }
     }
 
@@ -79,7 +79,7 @@ impl<'a> NodeScanProcess<'a> {
         let result = rcvr.await?;
         debug!("result = {}", result);
 
-        let rsp: Message;
+        let rsp: IOBMessage;
         {
             let timeout = sleep(Duration::from_secs(5));
             tokio::pin!(timeout);
@@ -107,29 +107,12 @@ impl<'a> NodeScanProcess<'a> {
         Ok(())
     }
 
-    fn match_rsp_ti232(rsp: &Message, node: &NodeRecord) -> bool {
-        if rsp.header.prm() && rsp.header.address == node.address {
-            if let Some(fc) = rsp.header.fc() {
-                match fc {
-                    FC::PrmSendConfirm | FC::PrmSendNoreply => {
-                        let mut scanner = Scanner::new(&rsp.payload[..]);
-                        let exp_tokens: &[Token] = &[
-                            Token::ASDH(ASDH::with(0x3E, COT::REQ, false)),
-                            Token::DUI(DUI::with_direct(232, 1, false))
-                        ];
-                        for exp_tok in exp_tokens {
-                            if let Ok(tok) = scanner.next_token() {
-                                if tok != *exp_tok {
-                                    return false;
-                                }
-                            } else {
-                                return false;
-                            }
-                        }
-
-                        return true;
-                    },
-                    _ => {}
+    fn match_rsp_ti232(rsp: &IOBMessage, node: &NodeRecord) -> bool {
+        let IOBMessage { iob, message } = rsp;
+        if message.header.address == node.address {
+            if iob.asdh == ASDH::with(0x3E, COT::REQ, false) && iob.ioa == 1 {
+                if let IE::TI232(_) = iob.ie {
+                    return true;
                 }
             }
         }
