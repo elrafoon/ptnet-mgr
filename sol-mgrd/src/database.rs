@@ -52,8 +52,9 @@ impl<'a> Database<'a> {
         let txn = self.db.begin_read()?;
         match txn.open_table(TABLE) {
             Ok(table) => {
-                for x in table.iter()? {
-                    self.nodes.insert(x.0.value().clone(), serde_cbor::from_slice(x.1.value())?);
+                for row_res in table.iter()? {
+                    let row = row_res?;
+                    self.nodes.insert(row.0.value().clone(), serde_cbor::from_slice(row.1.value())?);
                 }
                 Ok(())
             },
@@ -61,7 +62,8 @@ impl<'a> Database<'a> {
                 redb::Error::TableDoesNotExist(_) => Ok(()),
                 _ => Err(Box::new(err))
             }
-        }
+        }?;
+        Ok(())
     }
 
     pub fn load_node(&self, address: &NodeAddress) -> Result<Option<NodeRecord>, redb::Error> {
