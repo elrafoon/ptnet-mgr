@@ -12,7 +12,8 @@ const TABLE: redb::TableDefinition<&NodeAddress, &RawValue> = redb::TableDefinit
 #[derive(Debug,Serialize,Deserialize,Clone,Default)]
 pub struct NodeRecord {
     pub address: NodeAddress,
-    pub device_status: Option<ptnet_c::M_DEV_ST>
+    pub device_status: Option<ptnet_c::M_DEV_ST>,
+    pub device_descriptor: Option<ptnet_c::M_DEV_DC>
 }
 
 impl NodeRecord {

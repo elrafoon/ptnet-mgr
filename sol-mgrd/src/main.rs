@@ -16,7 +16,7 @@ mod helpers;
 use client_connection::{ClientConnection};
 use database::{Database};
 
-use crate::{client_connection::{ClientConnectionDispatcher, ClientConnectionSender}, database::NodeRecord, ptnet_process::NodeScanProcess};
+use crate::{client_connection::{ClientConnectionDispatcher, ClientConnectionSender}, database::NodeRecord, ptnet_process::{NodeScanProcess, PersistProcess}};
 
 /// SOL background processing daemon
 #[derive(Parser,Debug)]
@@ -88,6 +88,10 @@ async fn client_connect<'a>(conf: &Configuration, _sol_user: &schema::UserModel,
                 db,
                 &conn,
                 &sender
+            )),
+            Box::new(PersistProcess::new(
+                db,
+                &conn
             ))
         ];
 
