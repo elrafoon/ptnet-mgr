@@ -1,16 +1,38 @@
 use std::collections::HashMap;
+use serde::Serialize;
 use tokio::net::tcp::{ReadHalf, WriteHalf};
 use tokio::sync::{oneshot, broadcast, Mutex};
 use tokio::io::{AsyncWriteExt, AsyncReadExt};
-use log::{warn};
+use log::{warn, debug, as_serde};
 
-use crate::ptnet::{ptnet_c, MAGIC_RESULT, MAGIC_SERVER_MESSAGE};
+use crate::ptnet::{ptnet_c, MAGIC_RESULT, MAGIC_SERVER_MESSAGE, IOB, FC, HeaderBits, Scanner};
 
-#[derive(Debug,Clone)]
+#[derive(Debug,Clone,Serialize)]
 pub struct Message {
     pub port: i32,
     pub header: ptnet_c::Header,
     pub payload: Vec<u8>
+}
+
+#[derive(Debug,Clone)]
+pub struct MessageHeader {
+    pub port: i32,
+    pub header: ptnet_c::Header
+}
+
+#[derive(Debug,Clone)]
+pub struct IOBMessage {
+    pub message: MessageHeader,
+    pub iob: IOB
+}
+
+impl From<&Message> for MessageHeader {
+    fn from(value: &Message) -> Self {
+        Self {
+            port: value.port,
+            header: value.header
+        }
+    }
 }
 
 // Function that converts to byte array. (found on stackoverflow)
@@ -31,22 +53,29 @@ pub struct SharedState {
 pub struct ClientConnection {
     /// shared state lock
     pub lock: Mutex<SharedState>,
-    /// used internally to broadcast server messages
+    /// broadcasts server messages
     broadcast: broadcast::Sender<Message>,
+    /// broadcasts parsed IOBs
+    iob_broadcast: broadcast::Sender<IOBMessage>
 }
 
 impl ClientConnection {
     pub fn new() -> Self {
-        let (sender, _) = broadcast::channel::<Message>(128);
+        let (msg_sender, _) = broadcast::channel::<Message>(128);
+        let (iob_sender, _) = broadcast::channel::<IOBMessage>(128);
         ClientConnection {
             lock: Mutex::new(SharedState { id_gen: 0, request_map: HashMap::new() }),
-            broadcast: sender
-
+            broadcast: msg_sender,
+            iob_broadcast: iob_sender
         }
     }
 
     pub fn subscribe(&self) -> broadcast::Receiver<Message> {
         self.broadcast.subscribe()
+    }
+
+    pub fn subscribe_iob(&self) -> broadcast::Receiver<IOBMessage> {
+        self.iob_broadcast.subscribe()
     }
 }
 
@@ -180,7 +209,31 @@ impl<'a> ClientConnectionDispatcher<'a> {
             payload: pay
         };
 
-        self.conn.broadcast.send(msg).unwrap();
+        debug!(msg = as_serde!(msg); "Dispatching message");
+
+        // parse and dispatch IOBs from PRM messages
+        if msg.header.prm() {
+            if let Some(fc) = msg.header.fc() {
+                match fc {
+                    FC::PrmSendConfirm | FC::PrmSendNoreply => {
+                        for item in Scanner::new(&msg.payload[..]).into_iob_iter() {
+                            if let Ok(iob) = item {
+                                self.conn.iob_broadcast.send(IOBMessage {
+                                    message: MessageHeader::from(&msg),
+                                    iob: iob
+                                }).unwrap_or(0); // ignore no-one listening error
+                            } else {
+                                break;
+                            }
+                        }
+                    },
+                    _ => {}
+                }
+            }
+        }
+
+        // ignore no-one listening error
+        self.conn.broadcast.send(msg).unwrap_or(0);
 
         Ok(())
     }

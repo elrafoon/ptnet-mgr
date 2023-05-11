@@ -49,6 +49,7 @@ fn wrap_ptlink(component: &str) {
     re_to_serdes.insert(String::from("TI233"));
     re_to_serdes.insert(String::from("FW_Version_A"));
     re_to_serdes.insert(String::from("HW_Version_A"));
+    re_to_serdes.insert(String::from("Header"));
     re_to_serdes.build(true);
 
     // The bindgen::Builder is the main entry point
