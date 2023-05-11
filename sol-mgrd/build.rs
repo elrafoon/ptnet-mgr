@@ -46,6 +46,7 @@ fn wrap_ptlink(component: &str) {
 
     let mut re_to_serdes = bindgen::RegexSet::new();
     re_to_serdes.insert(String::from("TI232"));
+    re_to_serdes.insert(String::from("TI233"));
     re_to_serdes.insert(String::from("FW_Version_A"));
     re_to_serdes.insert(String::from("HW_Version_A"));
     re_to_serdes.build(true);

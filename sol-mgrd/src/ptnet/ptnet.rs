@@ -163,6 +163,7 @@ pub enum IE {
 
     /// system information in monitor direction
     TI232(ptnet_c::TI232),
+    TI233(ptnet_c::TI233),
 
     /// system information in control direction
     TI16(ptnet_c::TI16),
@@ -214,6 +215,7 @@ impl TryFrom<(/* tc: */ u8, /* buffer: */ &[u8])> for IE {
             147 => Ok(IE::TI147(IE::parse_from(value.1)?)),
 
             232 => Ok(IE::TI232(IE::parse_from(value.1)?)),
+            233 => Ok(IE::TI233(IE::parse_from(value.1)?)),
 
             16 => Ok(IE::TI16(IE::parse_from(value.1)?)),
             25 => Ok(IE::TI25),
