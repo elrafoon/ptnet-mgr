@@ -1,6 +1,6 @@
 use std::mem::size_of;
 
-use sol_lib::helpers::any_as_u8_slice_mut;
+use ptnet_rs::helpers::any_as_u8_slice_mut;
 
 use super::{ptnet_c};
 

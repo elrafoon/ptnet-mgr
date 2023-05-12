@@ -1,2 +1,2 @@
 [workspace]
-members = ["sol-lib", "sol-mgrd", "tools"]
+members = ["ptnet-mgrd", "tools"]
