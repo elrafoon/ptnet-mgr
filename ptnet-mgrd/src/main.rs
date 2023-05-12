@@ -18,7 +18,6 @@ use database::{Database};
 
 use crate::{client_connection::{ClientConnectionDispatcher, ClientConnectionSender}, database::NodeRecord, ptnet_process::{NodeScanProcess, PersistProcess}};
 
-/// SOL background processing daemon
 #[derive(Parser,Debug)]
 #[command(author, version, about, long_about = None)]
 pub struct Args {
@@ -26,7 +25,6 @@ pub struct Args {
     config: Option<String>
 }
 
-/// SOL background processing daemon
 #[derive(Debug,Serialize,Deserialize)]
 pub struct Configuration {
     /// ptlink server address
@@ -133,8 +131,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let soluser: schema::UserModel = serde_json::from_reader(fs::File::open(sol_user_path)?)?;
     info!("Model loaded");
 
-    info!("Loading sol-mgr database");
-    let redb_db = redb::Database::create("sol-mgr.redb")?;
+    info!("Loading ptnet-mgr database");
+    let redb_db = redb::Database::create("ptnet-mgr.redb")?;
     let mut db = Database::new(&redb_db);
     db.init()?;
     db.load()?;
