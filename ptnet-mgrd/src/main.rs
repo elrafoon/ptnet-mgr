@@ -9,9 +9,8 @@ use clap::{Parser};
 mod ptnet;
 mod client_connection;
 mod database;
-mod schema;
 mod ptnet_process;
-mod helpers;
+mod sol;
 
 use client_connection::{ClientConnection};
 use database::{Database};
@@ -26,13 +25,21 @@ pub struct Args {
 }
 
 #[derive(Debug,Serialize,Deserialize)]
+pub enum NodeModelSource {
+    /// don't load initial node seed, only detect nodes
+    None,
+    /// load initial node seed from SOL model
+    SOL(String /* model root */),
+}
+
+#[derive(Debug,Serialize,Deserialize)]
 pub struct Configuration {
     /// ptlink server address
     server_address: String,
     /// ptlink reconnect interval
     t_reconnect: u64,
-    /// sol model root dir
-    sol_model_root: String
+    /// where to load initial node list from
+    node_model_source: NodeModelSource
 }
 
 impl Default for Configuration {
@@ -40,7 +47,7 @@ impl Default for Configuration {
         Configuration {
             server_address: "127.0.0.1:9885".to_string(),
             t_reconnect: 10,
-            sol_model_root: "/var/lib/kvds".to_string()
+            node_model_source: NodeModelSource::SOL("/var/lib/kvds".to_string())
         }
     }
 }
@@ -51,7 +58,7 @@ impl Configuration {
     }
 }
 
-async fn client_connect<'a>(conf: &Configuration, _sol_user: &schema::UserModel, db: &Database<'a>) -> Result<(), Box<dyn std::error::Error>>
+async fn client_connect<'a>(conf: &Configuration, db: &Database<'a>) -> Result<(), Box<dyn std::error::Error>>
 {
     let addr = std::net::SocketAddr::from_str(&conf.server_address)?;
     let t_reconnect = conf.reconnect_duration();
@@ -113,7 +120,6 @@ async fn client_connect<'a>(conf: &Configuration, _sol_user: &schema::UserModel,
 }
 
 
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("debug")).init();
@@ -125,12 +131,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         conf = serde_json::from_reader(fs::File::open(conf_file)?)?;
     }
 
-    let mut sol_user_path = PathBuf::from(&conf.sol_model_root);
-    sol_user_path.push("sol.user.json");
-    info!("Loading SOL user model from {}", sol_user_path.as_os_str().to_str().unwrap());
-    let soluser: schema::UserModel = serde_json::from_reader(fs::File::open(sol_user_path)?)?;
-    info!("Model loaded");
-
     info!("Loading ptnet-mgr database");
     let redb_db = redb::Database::create("ptnet-mgr.redb")?;
     let mut db = Database::new(&redb_db);
@@ -138,37 +138,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     db.load()?;
     info!("Database loaded");
 
-    if let Some(network) = soluser.network.as_ref() {
-        let nodes = &db.nodes;
-        let mut new_nodes: Vec<NodeRecord> =
-            network.ballasts.iter()
-                .map(|ballast| helpers::parse_user_address(ballast.address.as_str()).unwrap())
-                .filter(|address| !nodes.contains_key(address))
-                .map(|address| NodeRecord { address: address, ..Default::default() })
+    match &conf.node_model_source {
+        NodeModelSource::None => {},
+        NodeModelSource::SOL(model_root) => {
+            let model_nodes = sol::loader::load(model_root)?;
+            let nodes = &db.nodes;
+
+            let new_nodes: Vec<&NodeRecord> = model_nodes.iter()
+                .filter(|node| !nodes.contains_key(&node.address))
                 .collect();
 
-        new_nodes.extend(
-            network.sensors.iter()
-                .filter(|e| e.part_of.is_none())
-                .map(|sensor| helpers::parse_user_address(sensor.address.as_str()).unwrap())
-                .filter(|address| !nodes.contains_key(address))
-                .map(|address| NodeRecord { address: address, ..Default::default() })
-        );
+            info!("Add {} new nodes", new_nodes.len());
+            db.add_nodes(new_nodes.iter().map(|node| *node))?;
 
-        info!("Add {} new nodes", new_nodes.len());
-        db.add_nodes(new_nodes.iter())?;
-
-        let sz = db.nodes.len();
-        db.nodes.retain(|k, _e| {
-            network.ballasts.iter().any(|b| *k == helpers::parse_user_address(b.address.as_str()).unwrap()) ||
-            network.sensors.iter().any(|s| *k == helpers::parse_user_address(s.address.as_str()).unwrap())
-        });
-        info!("Remove {} non-existent nodes", sz - db.nodes.len());
-    }
+            let sz = db.nodes.len();
+            db.nodes.retain(|k, _e| {
+                model_nodes.iter().any(|node| *k == node.address)
+            });
+            info!("Remove {} non-existent nodes", sz - db.nodes.len());
+        }
+    };
 
     client_connect(
         &conf,
-        &soluser,
         &db
     ).await?;
 
