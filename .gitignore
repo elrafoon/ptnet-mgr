@@ -1,2 +1,5 @@
 Cargo.lock
 /target
+ptnet-mgr.redb
+ptnet-mgrd/test-db.redb
+

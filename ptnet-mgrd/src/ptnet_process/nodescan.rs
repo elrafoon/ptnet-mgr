@@ -25,13 +25,14 @@ impl<'a> PtNetProcess for NodeScanProcess<'a> {
     async fn run(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let mut interval = interval(self.scan_period);
         loop {
-            for node in self.db.nodes.values() {
-                self.scan(node).await?;
+            let node_records = self.db.load_nodes(self.db.list_nodes()?.iter())?;
+            for node_record in node_records.iter() {
+                self.scan(node_record).await?;
                 interval.tick().await;
                 debug!("tick");
             }
 
-            if self.db.nodes.is_empty() {
+            if node_records.is_empty() {
                 interval.tick().await;
                 debug!("tick");
             }

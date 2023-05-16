@@ -1,6 +1,6 @@
 use tokio::sync::broadcast;
 use async_trait::async_trait;
-use crate::{database::{Database, NodeRecord}, client_connection::{Message, ClientConnection, IOBMessage}, ptnet::{HeaderBits, FC, Scanner, IOB, IE}};
+use crate::{database::{Database}, client_connection::{ClientConnection, IOBMessage}, ptnet::{IE}};
 
 use super::PtNetProcess;
 

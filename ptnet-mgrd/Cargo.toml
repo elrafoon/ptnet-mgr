@@ -18,6 +18,7 @@ clap = { version = "4.1", features = [ "derive" ] }
 async-trait = { version = "0.1" }
 futures = { version = "0.3" }
 packet = { version = "0.1" }
+futures-util = "0.3.28"
 
 [build-dependencies]
 bindgen = "0.65"

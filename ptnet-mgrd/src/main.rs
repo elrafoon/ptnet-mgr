@@ -1,9 +1,9 @@
-use std::{str::FromStr, fs, path::PathBuf};
+use std::{str::FromStr, fs};
 
 use futures::future::{try_join_all};
 use serde::{Serialize, Deserialize};
 use tokio::{time::{Duration, sleep}, net::{TcpStream, tcp::WriteHalf}, sync::Mutex};
-use log::{warn, info, error};
+use log::{warn, info, error, debug};
 use clap::{Parser};
 
 mod ptnet;
@@ -15,7 +15,7 @@ mod sol;
 use client_connection::{ClientConnection};
 use database::{Database};
 
-use crate::{client_connection::{ClientConnectionDispatcher, ClientConnectionSender}, database::NodeRecord, ptnet_process::{NodeScanProcess, PersistProcess}};
+use crate::{client_connection::{ClientConnectionDispatcher, ClientConnectionSender}, database::{NodeRecord, node_address_to_string}, ptnet_process::{NodeScanProcess, PersistProcess}};
 
 #[derive(Parser,Debug)]
 #[command(author, version, about, long_about = None)]
@@ -58,7 +58,7 @@ impl Configuration {
     }
 }
 
-async fn client_connect<'a>(conf: &Configuration, db: &Database<'a>) -> Result<(), Box<dyn std::error::Error>>
+async fn client_connect<'a,'evt>(conf: &Configuration, db: &Database<'a>) -> Result<(), Box<dyn std::error::Error>>
 {
     let addr = std::net::SocketAddr::from_str(&conf.server_address)?;
     let t_reconnect = conf.reconnect_duration();
@@ -135,27 +135,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let redb_db = redb::Database::create("ptnet-mgr.redb")?;
     let mut db = Database::new(&redb_db);
     db.init()?;
-    db.load()?;
+    // db.load()?;
     info!("Database loaded");
 
     match &conf.node_model_source {
         NodeModelSource::None => {},
         NodeModelSource::SOL(model_root) => {
             let model_nodes = sol::loader::load(model_root)?;
-            let nodes = &db.nodes;
+            let nodes = db.list_nodes()?;
 
             let new_nodes: Vec<&NodeRecord> = model_nodes.iter()
-                .filter(|node| !nodes.contains_key(&node.address))
+                .filter(|node| !nodes.contains(&node.address))
                 .collect();
 
             info!("Add {} new nodes", new_nodes.len());
-            db.add_nodes(new_nodes.iter().map(|node| *node))?;
+            db.update_nodes(new_nodes.iter().map(|node| *node), database::UpdateMode::MustCreate)?;
 
-            let sz = db.nodes.len();
-            db.nodes.retain(|k, _e| {
-                model_nodes.iter().any(|node| *k == node.address)
-            });
-            info!("Remove {} non-existent nodes", sz - db.nodes.len());
+            let sz = db.count_nodes()?;
+
+            db.remove_nodes(nodes
+                .iter()
+                .filter(|org_node| { !model_nodes.iter().any(|node| **org_node == node.address) })
+            )?;
+
+            info!("Remove {} non-existent nodes", sz - db.count_nodes()?);
         }
     };
 
