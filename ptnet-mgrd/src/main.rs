@@ -142,23 +142,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         NodeModelSource::None => {},
         NodeModelSource::SOL(model_root) => {
             let model_nodes = sol::loader::load(model_root)?;
-            let nodes = db.list_nodes()?;
+            let nodes = db.nodes.list()?;
 
             let new_nodes: Vec<&NodeRecord> = model_nodes.iter()
                 .filter(|node| !nodes.contains(&node.address))
                 .collect();
 
             info!("Add {} new nodes", new_nodes.len());
-            db.update_nodes(new_nodes.iter().map(|node| *node), database::UpdateMode::MustCreate)?;
+            db.nodes.update_many(new_nodes.iter().map(|node| *node), database::UpdateMode::MustCreate)?;
 
-            let sz = db.count_nodes()?;
+            let sz = db.nodes.len()?;
 
-            db.remove_nodes(nodes
+            db.nodes.remove_many(nodes
                 .iter()
                 .filter(|org_node| { !model_nodes.iter().any(|node| **org_node == node.address) })
             )?;
 
-            info!("Remove {} non-existent nodes", sz - db.count_nodes()?);
+            info!("Remove {} non-existent nodes", sz - db.nodes.len()?);
         }
     };
 

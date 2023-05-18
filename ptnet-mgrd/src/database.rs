@@ -15,7 +15,7 @@ pub fn node_address_to_string(a: &NodeAddress) -> String {
     )
 }
 
-const TABLE: redb::TableDefinition<&NodeAddress, &RawValue> = redb::TableDefinition::new("nodes");
+const NODE_TABLE: redb::TableDefinition<&NodeAddress, &RawValue> = redb::TableDefinition::new("nodes");
 
 #[derive(Debug,Serialize,Deserialize,Clone,Default,PartialEq)]
 pub struct NodeRecord {
@@ -47,43 +47,55 @@ impl Default for UpdateMode {
 }
 
 pub struct Database<'a> {
-    db: &'a redb::Database,
-    // TODO: Get rid of nodes, just access database
-    // pub nodes: HashMap<NodeAddress, NodeRecord>,
-    pub events: broadcast::Sender<Event>
+    pub(crate) inner_db: &'a redb::Database,
+    pub nodes: NodeTable<'a>
 }
 
 impl<'a> Database<'a>
 {
-    pub fn new(db: &'a redb::Database) -> Self {
-        let (evt_sender, _) = broadcast::channel::<Event>(128);
-
-        Database {
-            db: db,
-            // nodes: HashMap::new(),
-            events: evt_sender
+    pub fn new(re_db: &'a redb::Database) -> Self {
+        Self {
+            inner_db: re_db,
+            nodes: NodeTable::new(&re_db)
         }
     }
 
     pub fn init(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        let txn = self.db.begin_write()?;
+        let txn = self.inner_db.begin_write()?;
         {
-            let _table = txn.open_table(TABLE)?;
+            let _node_table = txn.open_table(NODE_TABLE)?;
         }
         txn.commit()?;
 
         Ok(())
     }
+}
 
-    pub fn count_nodes(&self) -> Result<usize, Box<dyn std::error::Error>> {
+
+pub struct NodeTable<'a> {
+    db: &'a redb::Database,
+    pub events: broadcast::Sender<Event>
+}
+
+impl<'a> NodeTable<'a> {
+    pub fn new(db: &'a redb::Database) -> Self {
+        let (evt_sender, _) = broadcast::channel::<Event>(128);
+
+        Self {
+            db: db,
+            events: evt_sender
+        }
+    }
+
+    pub fn len(&self) -> Result<usize, Box<dyn std::error::Error>> {
         let txn = self.db.begin_read()?;
-        let table = txn.open_table(TABLE)?;
+        let table = txn.open_table(NODE_TABLE)?;
         Ok(table.len()? as usize)
     }
 
-    pub fn list_nodes(&self) -> Result<Vec<NodeAddress>, Box<dyn std::error::Error>> {
+    pub fn list(&self) -> Result<Vec<NodeAddress>, Box<dyn std::error::Error>> {
         let txn = self.db.begin_read()?;
-        let table = txn.open_table(TABLE)?;
+        let table = txn.open_table(NODE_TABLE)?;
         let mut results: Vec<NodeAddress> = Vec::new();
         results.reserve_exact(table.len()? as usize);
         for entry in table.iter()? {
@@ -93,10 +105,10 @@ impl<'a> Database<'a>
         Ok(results)
     }
 
-    pub fn load_nodes<'call, T: Iterator<Item = &'call NodeAddress>>(&self, iter: T) -> Result<Vec<NodeRecord>, Box<dyn std::error::Error>> {
+    pub fn load_many<'call, T: Iterator<Item = &'call NodeAddress>>(&self, iter: T) -> Result<Vec<NodeRecord>, Box<dyn std::error::Error>> {
         // pub fn remove_nodes<'call, T: Iterator<Item = &'call NodeAddress>>(&self, iter: T) -> Result<(), Box<dyn std::error::Error>> {
         let txn = self.db.begin_read()?;
-        let table = txn.open_table(TABLE)?;
+        let table = txn.open_table(NODE_TABLE)?;
         let mut results: Vec<NodeRecord> = Vec::new();
 
         for address in iter {
@@ -118,7 +130,7 @@ impl<'a> Database<'a>
     }
 
     /// Modify node in callback
-    pub fn modify_node<T>(&self, address: &NodeAddress, cb: T) -> Result<(), Box<dyn std::error::Error>>
+    pub fn modify<T>(&self, address: &NodeAddress, cb: T) -> Result<(), Box<dyn std::error::Error>>
     where
         T: FnOnce(Option<NodeRecord>) -> Option<NodeRecord>
     {
@@ -126,7 +138,7 @@ impl<'a> Database<'a>
         let txn = self.db.begin_write()?;
 
         {
-            let mut table = txn.open_table(TABLE)?;
+            let mut table = txn.open_table(NODE_TABLE)?;
             let rec: Option<NodeRecord> = match table.get(address)? {
                 None => None,
                 Some(cbor) => Some(serde_cbor::from_slice(cbor.value()).unwrap())
@@ -153,12 +165,12 @@ impl<'a> Database<'a>
     }
 
     /// update or create node
-    pub fn update_node(&self, address: &NodeAddress, rec: &NodeRecord, mode: UpdateMode) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn update(&self, address: &NodeAddress, rec: &NodeRecord, mode: UpdateMode) -> Result<(), Box<dyn std::error::Error>> {
         let prev_rec_exists;
 
         let txn = self.db.begin_write()?;
         {
-            let mut table = txn.open_table(TABLE)?;
+            let mut table = txn.open_table(NODE_TABLE)?;
 
             match mode {
                 UpdateMode::MustCreate => {
@@ -196,10 +208,10 @@ impl<'a> Database<'a>
         Ok(())
     }
 
-    pub fn remove_nodes<'call, T: Iterator<Item = &'call NodeAddress>>(&self, iter: T) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn remove_many<'call, T: Iterator<Item = &'call NodeAddress>>(&self, iter: T) -> Result<(), Box<dyn std::error::Error>> {
         let txn = self.db.begin_write()?;
         {
-            let mut table = txn.open_table(TABLE)?;
+            let mut table = txn.open_table(NODE_TABLE)?;
             for address in iter {
                 table.remove(address)?;
             }
@@ -208,7 +220,7 @@ impl<'a> Database<'a>
         Ok(())
     }
 
-    pub fn update_nodes<'b,T>(&mut self, it: T, mode: UpdateMode) -> Result<(), Box<dyn std::error::Error>>
+    pub fn update_many<'b,T>(&mut self, it: T, mode: UpdateMode) -> Result<(), Box<dyn std::error::Error>>
     where
         T: Iterator<Item = &'b NodeRecord> + Clone,
     {
@@ -217,7 +229,7 @@ impl<'a> Database<'a>
 
         let txn = self.db.begin_write()?;
         {
-            let mut table = txn.open_table(TABLE)?;
+            let mut table = txn.open_table(NODE_TABLE)?;
 
             for rec in it {
                 match mode {
@@ -276,7 +288,7 @@ mod tests {
     fn node_events() {
         let rdb = make_redb();
         let db = make_db(&rdb);
-        let mut rcvr = db.events.subscribe();
+        let mut rcvr = db.nodes.events.subscribe();
 
         let mut rec = NodeRecord {
             address: [0xFE, 0xED, 0xDE, 0xAF, 0xBE, 0xEF],
@@ -296,7 +308,7 @@ mod tests {
             device_descriptor: None
         };
 
-        db.update_node(&rec.address, &rec, UpdateMode::MustCreate).expect("update_node shall succeeed");
+        db.nodes.update(&rec.address, &rec, UpdateMode::MustCreate).expect("update_node shall succeeed");
 
         let evt = rcvr.recv().now_or_never().expect("Event shall arrive").unwrap();
         if let Event::NodeAdded(n_rec) = evt {
@@ -311,7 +323,7 @@ mod tests {
             b: [1,0,0,0,0,0,0]
         });
 
-        db.update_node(&rec.address, &rec, UpdateMode::MustExist).unwrap();
+        db.nodes.update(&rec.address, &rec, UpdateMode::MustExist).unwrap();
 
         let evt = rcvr.recv().now_or_never().expect("Event shall arrive").unwrap();
         if let Event::NodeModified(n_rec) = evt {

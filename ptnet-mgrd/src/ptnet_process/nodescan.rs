@@ -25,7 +25,7 @@ impl<'a> PtNetProcess for NodeScanProcess<'a> {
     async fn run(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let mut interval = interval(self.scan_period);
         loop {
-            let node_records = self.db.load_nodes(self.db.list_nodes()?.iter())?;
+            let node_records = self.db.nodes.load_many(self.db.nodes.list()?.iter())?;
             for node_record in node_records.iter() {
                 self.scan(node_record).await?;
                 interval.tick().await;
