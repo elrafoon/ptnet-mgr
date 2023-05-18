@@ -46,7 +46,7 @@ struct PrintHeader {
 #[derive(Debug)]
 enum Error {
     IOError(std::io::Error),
-    HeaderNotPresent,
+    LoadError(image_header::LoadError),
     ImageError(image_header::VerifyError),
     ParseError(image_header::ParseError)
 }
@@ -55,7 +55,7 @@ impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Error::IOError(io_error) => { write!(f, "{}", io_error) },
-            Error::HeaderNotPresent => { write!(f, "Header not present") },
+            Error::LoadError(load_error) => { write!(f, "{}", load_error) },
             Error::ImageError(img_error) => { write!(f, "{}", img_error) },
             Error::ParseError(parse_error) => { write!(f, "{}", parse_error) }
         }
@@ -77,22 +77,14 @@ impl From<image_header::ParseError> for Error {
     fn from(value: image_header::ParseError) -> Self { Error::ParseError(value) }
 }
 
+impl From<image_header::LoadError> for Error {
+    fn from(value: image_header::LoadError) -> Self { Error::LoadError(value) }
+}
+
 fn print_header(params: &PrintHeader) -> Result<(), Error> {
-    let mut hdr = image_header::Container::default();
-
     let fin = File::open(&params.infile)?;
-    let mut reader = BufReader::new(fin);
-    let pay_size = reader.seek(SeekFrom::End(-(size_of::<image_header::Container>() as i64))).map_err(|_| Error::HeaderNotPresent)?;
-    reader.read_exact(unsafe { any_as_u8_slice_mut(&mut hdr) })?;
-
-    reader.seek(SeekFrom::Start(0))?;
-    let mut payload: Vec<u8> = vec![0u8; pay_size as usize];
-    reader.read_exact(&mut payload)?;
-
-    hdr.verify(Some(&payload[..]))?;
-
+    let (hdr, _payload) = image_header::Container::load_from(fin)?;
     println!("Header: {:?}", hdr);
-
     Ok(())
 }
 
