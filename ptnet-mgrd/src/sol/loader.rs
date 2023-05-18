@@ -2,7 +2,7 @@ use std::{path::PathBuf, fs};
 
 use log::info;
 
-use crate::{database::NodeRecord, sol::schema};
+use crate::{database::node_table::NodeRecord, sol::schema};
 
 fn parse_user_address(node_address: &str) -> Option<[u8; 6]> {
     let mut uid: Vec<u8> = node_address.split(":").map(|x| u8::from_str_radix(x, 16).unwrap()).collect();

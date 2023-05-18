@@ -1,21 +1,14 @@
-use std::{io, iter::Iterator, sync::Arc};
+use std::{sync::Arc, io};
 
 use redb::ReadableTable;
 use serde::{Serialize, Deserialize};
 use tokio::sync::broadcast;
+
 use crate::ptnet::ptnet_c;
 
-pub type NodeAddress = [u8; 6];
-type RawValue = [u8];
+use super::{NodeAddress, RawValue, node_address_to_string, UpdateMode};
 
-pub fn node_address_to_string(a: &NodeAddress) -> String {
-    format!("{:#02X}:{:#02X}:{:#02X}:{:#02X}:{:#02X}:{:#02X}",
-        a.get(0).unwrap(), a.get(1).unwrap(), a.get(2).unwrap(),
-        a.get(3).unwrap(), a.get(4).unwrap(), a.get(5).unwrap()
-    )
-}
-
-const NODE_TABLE: redb::TableDefinition<&NodeAddress, &RawValue> = redb::TableDefinition::new("nodes");
+pub(super) const NODE_TABLE: redb::TableDefinition<&NodeAddress, &RawValue> = redb::TableDefinition::new("nodes");
 
 #[derive(Debug,Serialize,Deserialize,Clone,Default,PartialEq)]
 pub struct NodeRecord {
@@ -35,42 +28,6 @@ pub enum Event {
     NodeAdded(Arc<NodeRecord>),
     NodeModified(Arc<NodeRecord>),
 }
-
-pub enum UpdateMode {
-    UpdateOrCreate,
-    MustCreate,
-    MustExist
-}
-
-impl Default for UpdateMode {
-    fn default() -> Self { UpdateMode::UpdateOrCreate }
-}
-
-pub struct Database<'a> {
-    pub(crate) inner_db: &'a redb::Database,
-    pub nodes: NodeTable<'a>
-}
-
-impl<'a> Database<'a>
-{
-    pub fn new(re_db: &'a redb::Database) -> Self {
-        Self {
-            inner_db: re_db,
-            nodes: NodeTable::new(&re_db)
-        }
-    }
-
-    pub fn init(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        let txn = self.inner_db.begin_write()?;
-        {
-            let _node_table = txn.open_table(NODE_TABLE)?;
-        }
-        txn.commit()?;
-
-        Ok(())
-    }
-}
-
 
 pub struct NodeTable<'a> {
     db: &'a redb::Database,
@@ -280,7 +237,7 @@ mod tests {
 
     use futures::FutureExt;
 
-    use crate::ptnet::ptnet_c::{M_DEV_ST, FW_Version_A, HW_Version_A, M_DEV_DC};
+    use crate::{ptnet::ptnet_c::{M_DEV_ST, FW_Version_A, HW_Version_A, M_DEV_DC}, database::Database};
 
     use super::*;
 

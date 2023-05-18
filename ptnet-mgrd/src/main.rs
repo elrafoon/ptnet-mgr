@@ -15,7 +15,7 @@ mod sol;
 use client_connection::{ClientConnection};
 use database::{Database};
 
-use crate::{client_connection::{ClientConnectionDispatcher, ClientConnectionSender}, database::{NodeRecord, node_address_to_string}, ptnet_process::{NodeScanProcess, PersistProcess}};
+use crate::{client_connection::{ClientConnectionDispatcher, ClientConnectionSender}, database::{node_address_to_string, node_table::NodeRecord}, ptnet_process::{NodeScanProcess, PersistProcess}};
 
 #[derive(Parser,Debug)]
 #[command(author, version, about, long_about = None)]

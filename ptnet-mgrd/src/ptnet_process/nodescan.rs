@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use log::{info, debug, warn};
 use tokio::{time::{interval, sleep}, sync::broadcast, select};
 
-use crate::{database::{Database, NodeRecord}, client_connection::IOBMessage};
+use crate::{database::{Database, node_table::NodeRecord}, client_connection::IOBMessage};
 use crate::ptnet::*;
 use crate::ptnet::ptnet_c;
 use crate::client_connection::{ClientConnection, Message, ClientConnectionSender};
