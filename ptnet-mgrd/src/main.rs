@@ -6,7 +6,6 @@ use tokio::{time::{Duration, sleep}, net::{TcpStream, tcp::WriteHalf}, sync::Mut
 use log::{warn, info, error, debug};
 use clap::{Parser};
 
-mod ptnet;
 mod client_connection;
 mod database;
 mod ptnet_process;

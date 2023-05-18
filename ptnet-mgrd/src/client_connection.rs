@@ -5,19 +5,19 @@ use tokio::sync::{oneshot, broadcast, Mutex};
 use tokio::io::{AsyncWriteExt, AsyncReadExt};
 use log::{warn, debug, as_serde};
 
-use crate::ptnet::{ptnet_c, MAGIC_RESULT, MAGIC_SERVER_MESSAGE, IOB, FC, HeaderBits, Scanner};
+use ptnet::{self, MAGIC_RESULT, MAGIC_SERVER_MESSAGE, IOB, FC, HeaderBits, Scanner};
 
 #[derive(Debug,Clone,Serialize)]
 pub struct Message {
     pub port: i32,
-    pub header: ptnet_c::Header,
+    pub header: ptnet::Header,
     pub payload: Vec<u8>
 }
 
 #[derive(Debug,Clone)]
 pub struct MessageHeader {
     pub port: i32,
-    pub header: ptnet_c::Header
+    pub header: ptnet::Header
 }
 
 #[derive(Debug,Clone)]
@@ -95,7 +95,7 @@ impl<'a> ClientConnectionSender<'a> {
     pub async fn send_message(&self, msg: &Message) -> Result<oneshot::Receiver<u16>, Box<dyn std::error::Error>> {
         let mut ss = self.conn.lock.lock().await;
 
-        let raw_msg = ptnet_c::Message {
+        let raw_msg = ptnet::Message {
             id: ss.id_gen,
             iPort: msg.port,
             header: msg.header,
@@ -107,7 +107,7 @@ impl<'a> ClientConnectionSender<'a> {
         let msg_slice: &[u8];
 
         unsafe {
-            magic_slice = any_as_u8_slice(&ptnet_c::MAGIC_MESSAGE);
+            magic_slice = any_as_u8_slice(&ptnet::MAGIC_MESSAGE);
             msg_slice = any_as_u8_slice(&raw_msg);
         }
 
@@ -142,7 +142,7 @@ impl<'a> ClientConnectionDispatcher<'a> {
 
     pub async fn dispatch(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         loop {
-            let mut magic: ptnet_c::magic_t = 0;
+            let mut magic: ptnet::magic_t = 0;
             let mut magic_slice: &mut [u8];
 
             unsafe {
@@ -163,7 +163,7 @@ impl<'a> ClientConnectionDispatcher<'a> {
     }
 
     async fn dispatch_result(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        let mut result = ptnet_c::MessageResult { msgId: 0, result: 0 };
+        let mut result = ptnet::MessageResult { msgId: 0, result: 0 };
         let mut result_slice: &mut [u8];
 
         unsafe {
@@ -185,9 +185,9 @@ impl<'a> ClientConnectionDispatcher<'a> {
     }
 
     async fn dispatch_server_message(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        let mut raw_msg = ptnet_c::ServerMessage {
+        let mut raw_msg = ptnet::ServerMessage {
             iPort: 0,
-            header: ptnet_c::Header { C: 0, address: [0; 6] },
+            header: ptnet::Header { C: 0, address: [0; 6] },
             payloadLength: 0
         };
         let msg_slice: &mut [u8];

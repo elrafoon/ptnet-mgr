@@ -1,10 +1,9 @@
 use std::{sync::Arc, io};
 
+use ptnet;
 use redb::ReadableTable;
 use serde::{Serialize, Deserialize};
 use tokio::sync::broadcast;
-
-use crate::ptnet::ptnet_c;
 
 use super::{NodeAddress, RawValue, node_address_to_string, UpdateMode};
 
@@ -13,8 +12,8 @@ pub(super) const NODE_TABLE: redb::TableDefinition<&NodeAddress, &RawValue> = re
 #[derive(Debug,Serialize,Deserialize,Clone,Default,PartialEq)]
 pub struct NodeRecord {
     pub address: NodeAddress,
-    pub device_status: Option<ptnet_c::M_DEV_ST>,
-    pub device_descriptor: Option<ptnet_c::M_DEV_DC>
+    pub device_status: Option<ptnet::M_DEV_ST>,
+    pub device_descriptor: Option<ptnet::M_DEV_DC>
 }
 
 impl NodeRecord {
@@ -236,8 +235,9 @@ mod tests {
     use std::{fs, path::PathBuf, str::FromStr};
 
     use futures::FutureExt;
+    use ptnet::{M_DEV_ST, FW_Version_A, HW_Version_A, M_DEV_DC};
 
-    use crate::{ptnet::ptnet_c::{M_DEV_ST, FW_Version_A, HW_Version_A, M_DEV_DC}, database::Database};
+    use crate::database::Database;
 
     use super::*;
 

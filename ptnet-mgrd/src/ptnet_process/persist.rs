@@ -1,6 +1,8 @@
 use tokio::sync::broadcast;
 use async_trait::async_trait;
-use crate::{database::{Database}, client_connection::{ClientConnection, IOBMessage}, ptnet::{IE}};
+use ptnet::{IE};
+
+use crate::{database::{Database}, client_connection::{ClientConnection, IOBMessage}};
 
 use super::PtNetProcess;
 

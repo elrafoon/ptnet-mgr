@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand, Args};
-use ptnet_rs::image_header::{self};
-use ptnet_rs::helpers::{any_as_u8_slice_mut, any_as_u8_slice};
+use ptnet::image_header::{self};
+use ptnet::helpers::{any_as_u8_slice_mut, any_as_u8_slice};
 use std::io::{Seek, BufWriter, Write, SeekFrom};
 use std::str::FromStr;
 use std::{path::{PathBuf}, fs::File, mem::size_of, io::{BufReader, Read}};

@@ -5,12 +5,10 @@ use log::{info, debug, warn};
 use tokio::{time::{interval, sleep}, sync::broadcast, select};
 
 use crate::{database::{Database, node_table::NodeRecord}, client_connection::IOBMessage};
-use crate::ptnet::*;
-use crate::ptnet::ptnet_c;
 use crate::client_connection::{ClientConnection, Message, ClientConnectionSender};
 use crate::ptnet_process::{PtNetProcess};
 
-use crate::ptnet::ptnet_c::{BIT_PRM, FC_PRM_SEND_NOREPLY};
+use ptnet::*;
 
 pub struct NodeScanProcess<'a> {
     scan_period: Duration,
@@ -57,14 +55,14 @@ impl<'a> NodeScanProcess<'a> {
         let msg;
         {
             let mut buf = packet::buffer::Dynamic::new();
-            PtNetPacket::with_asdh(&ptnet_c::ASDH::with(0x3E, COT::REQ, false), &mut buf)?
-                .begin_asdu(&ptnet_c::DUI::with_direct(ptnet_c::TC_C_RD, 1, false))?
+            PtNetPacket::with_asdh(&ptnet::ASDH::with(0x3E, COT::REQ, false), &mut buf)?
+                .begin_asdu(&ptnet::DUI::with_direct(ptnet::TC_C_RD, 1, false))?
                 .add_ioa(0)?
                 .end_asdu()?;
 
             msg = Message {
                 port: PORT_AUTO,
-                header: ptnet_c::Header {
+                header: ptnet::Header {
                     C: (BIT_PRM | FC_PRM_SEND_NOREPLY) as u8,
                     address: node.address,
                 },
