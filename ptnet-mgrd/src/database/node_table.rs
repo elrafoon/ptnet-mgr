@@ -29,7 +29,7 @@ pub enum Event {
 }
 
 pub struct NodeTable<'a> {
-    db: &'a redb::Database,
+    pub(crate) db: &'a redb::Database,
     pub events: broadcast::Sender<Event>
 }
 
@@ -229,6 +229,261 @@ impl<'a> NodeTable<'a> {
         Ok(())
     }
 }
+
+/*
+
+pub trait TableKey<K> {
+    fn table_key(&self) -> &K
+    where
+        K: redb::RedbKey;
+}
+
+/*
+impl TableKey<NodeAddress> for NodeRecord {
+    fn table_key(&self) -> NodeAddress {
+        self.address
+    }
+}
+*/
+
+impl TableKey<NodeAddress> for NodeRecord {
+    fn table_key(&self) -> &NodeAddress {
+        &self.address
+    }
+}
+
+
+/*
+
+pub trait TableKey<K>
+where K: redb::RedbKey {
+    fn table_key(&self) -> K;
+}
+
+impl<'a> TableKey<&'a NodeAddress> for NodeRecord {
+    fn table_key(&self) -> &NodeAddress {
+        &self.address
+    }
+}
+*/
+
+pub trait DatabaseTable<T> {
+    // type Key;
+    type Record: Clone;
+    type Event;
+
+    fn redb(&self) -> &redb::Database;
+    fn table_definition(&self) -> T;
+    /*
+    fn open_table<'db,'txn,'key>(&self, txn: &'txn redb::WriteTransaction<'db>) -> Result<redb::Table<'db,'txn,Self::Key,&'static RawValue>,redb::Error>
+    where
+        Self::Key: redb::RedbKey + 'key;
+    */
+    fn send_event(&self, evt: Event);
+    fn make_record_added_event(&self, rec: Self::Record) -> Event;
+    fn make_record_modified_event(&self, rec: Self::Record) -> Event;
+}
+
+impl<'a> DatabaseTable<redb::TableDefinition<'static, &'static NodeAddress, &'static RawValue>> for NodeTable<'a> {
+    // type Key = &'static NodeAddress;
+    type Record = NodeRecord;
+    type Event = Event;
+
+    fn redb(&self) -> &redb::Database {
+        self.db
+    }
+
+    fn table_definition(&self) -> redb::TableDefinition<'static,&'static NodeAddress, &'static RawValue>
+    {
+        NODE_TABLE
+    }
+
+    /*
+    fn table_definition(&self) -> redb::TableDefinition<Self::Key,&RawValue>
+    where
+        Self::Key: redb::RedbKey
+    {
+        NODE_TABLE
+    }
+
+    fn open_table<'db,'txn,'key>(&self, txn: &'txn redb::WriteTransaction<'db>) -> Result<redb::Table<'db,'txn,Self::Key,&'static RawValue>,redb::Error>
+    where
+        Self::Key: redb::RedbKey + 'key
+    {
+        txn.open_table(NODE_TABLE)
+    }
+        */
+
+    fn send_event(&self, evt: Event) {
+        self.events.send(evt).unwrap_or_default();
+    }
+
+    fn make_record_added_event(&self, rec: Self::Record) -> Event {
+        Event::NodeAdded(Arc::new(rec))
+    }
+
+    fn make_record_modified_event(&self, rec: Self::Record) -> Event {
+        Event::NodeModified(Arc::new(rec))
+    }
+}
+
+pub trait TableOps<'a,Key,Value,Record: Clone> {
+    // type Record: Clone;
+    // type Key;
+
+    fn x_update_many<'t,T>(&self, it: T, mode: UpdateMode) -> Result<(), Box<dyn std::error::Error>>
+    where
+        T: Iterator<Item = &'t Record> + Clone,
+        Record: 't;
+        // Self::Record: TableKey<Self::Key> + Serialize + 'b,
+        // Self::Key: redb::RedbKey + 'b;
+}
+
+
+pub fn x_update_many<'t,T,IT,Key,Record>(dt: T, it: IT, mode: UpdateMode) -> Result<(), Box<dyn std::error::Error>>
+where
+    T: Borrow<DatabaseTable<redb::TableDefinition<'t, &'t Key, &'t RawValue>>,
+    IT: Iterator<Item = &'t Record> + Clone,
+    Record: TableKey<Key> + Serialize + 't,
+    Key: redb::RedbKey + 'static,
+    &'t Key: redb::RedbKey + 'static,
+    for<'a> &'a Key: std::borrow::Borrow<Key>
+{
+    let mut events: Vec<Event> = Vec::new();
+    // let prev_rec_exists;
+
+    let txn = dt.redb().begin_write()?;
+    {
+        let mut table = txn.open_table(dt.table_definition())?;
+        // let mut table = self.open_table(&txn)?;
+
+        for rec in it {
+            let rec_key = rec.table_key();
+            match mode {
+                UpdateMode::MustCreate => {
+                    if table.get(rec_key)?.is_some() {
+                        return Err(Box::new(io::Error::new(
+                            io::ErrorKind::AlreadyExists,
+                            "Record already exists"
+                        )));
+                    }
+                },
+                UpdateMode::MustExist => {
+                    if table.get(&rec_key)?.is_none() {
+                        return Err(Box::new(io::Error::new(
+                            io::ErrorKind::NotFound,
+                            "Record does not exist"
+                        )));
+                    }
+                },
+                UpdateMode::UpdateOrCreate => {}
+            };
+
+            let rec_cbor = serde_cbor::to_vec(rec)?;
+            let rec_bytes = rec_cbor.as_slice();
+            let prev_rec = table.insert(rec_key, rec_bytes)?;
+
+            events.push(
+                match prev_rec {
+                    None => dt.make_record_added_event(rec),
+                    Some(_) => dt.make_record_modified_event(rec)
+                }
+            );
+        }
+    }
+    txn.commit()?;
+
+    while let Some(evt) = events.pop() {
+        table.send_event(evt);
+    }
+
+    Ok(())
+}
+
+#[cfg(kokot)]
+impl<'a,T,Key,Value,Record> TableOps<'a,Key,Value,Record> for T
+where
+    for<'t> T: DatabaseTable<redb::TableDefinition<'a, &'t Key, &'t Value>,Record=Record>,
+    //for<'t> Key: redb::RedbKey + std::borrow::Borrow<Key::SelfType<'t>> + 't,
+    for<'t> &'t Key: redb::RedbKey,
+    for<'t> &'t Value: redb::RedbValue,
+    Record: Serialize + Clone,
+    for<'t> &'t Record: TableKey<Key>,
+    Key: redb::RedbKey + 'static,
+    Key: Copy,
+    for<'t> &'t Key: std::borrow::Borrow<<&'t Key as redb::RedbValue>::SelfType<'t>>,
+    Value: 'static,
+    for<'t> Key: std::borrow::Borrow<<&'t Key as redb::RedbValue>::SelfType<'t>>,
+    for<'t> &'t [u8]: std::borrow::Borrow<<&'t Value as redb::RedbValue>::SelfType<'t>>
+    // for<'a> &'a Value: std::borrow::Borrow<Value::SelfType<'a>>,
+    // for<'t> Key: redb::RedbKey + std::borrow::Borrow<Key::SelfType<'t>> + 'static,
+    /*
+    for<'a> &'a Key: std::borrow::Borrow<Key::SelfType<'a>>,
+    for<'a> &'a Value: std::borrow::Borrow<Value::SelfType<'a>>,
+    for<'a> &'a [u8]: std::borrow::Borrow<Value::SelfType<'a>>
+    */
+{
+    // type Key = T::Key;
+
+    fn x_update_many<'t,IT>(&self, it: IT, mode: UpdateMode) -> Result<(), Box<dyn std::error::Error>>
+    where
+        IT: Iterator<Item = &'t Record> + Clone,
+        Record: 't
+        // Self::Record: TableKey<Key> + Serialize + 'b
+    {
+        let mut events: Vec<Event> = Vec::new();
+        // let prev_rec_exists;
+
+        let txn = self.redb().begin_write()?;
+        {
+            let mut table = txn.open_table(self.table_definition())?;
+            // let mut table = self.open_table(&txn)?;
+
+            for rec in it {
+                let rec_key = *rec.table_key();
+                match mode {
+                    UpdateMode::MustCreate => {
+                        if table.get(&rec_key)?.is_some() {
+                            return Err(Box::new(io::Error::new(
+                                io::ErrorKind::AlreadyExists,
+                                "Record already exists"
+                            )));
+                        }
+                    },
+                    UpdateMode::MustExist => {
+                        if table.get(&rec_key)?.is_none() {
+                            return Err(Box::new(io::Error::new(
+                                io::ErrorKind::NotFound,
+                                "Record does not exist"
+                            )));
+                        }
+                    },
+                    UpdateMode::UpdateOrCreate => {}
+                };
+
+                let rec_cbor = serde_cbor::to_vec(rec)?;
+                let rec_bytes = rec_cbor.as_slice();
+                let prev_rec = table.insert(*rec.table_key(), rec_bytes)?;
+
+                events.push(
+                    match prev_rec {
+                        None => self.make_record_added_event(rec.clone()),
+                        Some(_) => self.make_record_modified_event(rec.clone())
+                    }
+                );
+            }
+        }
+        txn.commit()?;
+
+        while let Some(evt) = events.pop() {
+            self.send_event(evt);
+        }
+
+        Ok(())
+    }
+}
+
+*/
 
 #[cfg(test)]
 mod tests {

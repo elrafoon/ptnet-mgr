@@ -1,8 +1,10 @@
 mod nodescan;
 mod persist;
+mod fwu;
 
 pub use nodescan::*;
 pub use persist::*;
+pub use fwu::*;
 
 use async_trait::async_trait;
 

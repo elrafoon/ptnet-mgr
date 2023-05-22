@@ -125,6 +125,19 @@ impl<'a> ClientConnectionSender<'a> {
 
         Ok(receiver)
     }
+
+    pub async fn send_prm(&self, fc: FC, address: &[u8; 6], buf: &[u8]) -> Result<oneshot::Receiver<u16>, Box<dyn std::error::Error>> {
+        let msg = Message {
+            port: ptnet::PORT_AUTO,
+            header: ptnet::Header {
+                C: (ptnet::BIT_PRM as u8) | (fc as u8),
+                address: *address,
+            },
+            payload: buf.into(),
+        };
+
+        self.send_message(&msg).await
+    }
 }
 
 pub struct ClientConnectionDispatcher<'a> {

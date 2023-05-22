@@ -1,6 +1,8 @@
-use self::node_table::{NodeTable, NODE_TABLE};
+use self::{node_table::{NodeTable, NODE_TABLE}, fwu_state_table::{FWU_STATE_TABLE, FWUStateTable}};
 
 pub mod node_table;
+pub mod fwu_state_table;
+pub mod algo;
 
 pub type NodeAddress = [u8; 6];
 type RawValue = [u8];
@@ -11,8 +13,6 @@ pub fn node_address_to_string(a: &NodeAddress) -> String {
         a.get(3).unwrap(), a.get(4).unwrap(), a.get(5).unwrap()
     )
 }
-
-const FWU_STATE_TABLE: redb::TableDefinition<&NodeAddress, &RawValue> = redb::TableDefinition::new("fwu_state");
 
 pub enum UpdateMode {
     UpdateOrCreate,
@@ -26,15 +26,16 @@ impl Default for UpdateMode {
 
 pub struct Database<'a> {
     pub(crate) inner_db: &'a redb::Database,
-    pub nodes: NodeTable<'a>
+    pub nodes: NodeTable<'a>,
+    pub fwu_state: FWUStateTable<'a>
 }
 
-impl<'a> Database<'a>
-{
+impl<'a> Database<'a> {
     pub fn new(re_db: &'a redb::Database) -> Self {
         Self {
             inner_db: re_db,
-            nodes: NodeTable::new(&re_db)
+            nodes: NodeTable::new(&re_db),
+            fwu_state: FWUStateTable::new(&re_db)
         }
     }
 

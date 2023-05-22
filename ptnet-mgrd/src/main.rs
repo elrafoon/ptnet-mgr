@@ -10,6 +10,7 @@ mod client_connection;
 mod database;
 mod ptnet_process;
 mod sol;
+mod fw_index;
 
 use client_connection::{ClientConnection};
 use database::{Database};
@@ -148,6 +149,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .collect();
 
             info!("Add {} new nodes", new_nodes.len());
+            /*
+            TableOps::x_update_many(
+                &db.nodes,
+                new_nodes.iter().map(|node| *node),
+                database::UpdateMode::MustCreate
+            )?;
+            */
             db.nodes.update_many(new_nodes.iter().map(|node| *node), database::UpdateMode::MustCreate)?;
 
             let sz = db.nodes.len()?;
