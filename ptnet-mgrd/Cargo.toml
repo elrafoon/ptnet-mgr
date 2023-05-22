@@ -19,3 +19,4 @@ async-trait = { version = "0.1" }
 packet = { version = "0.1" }
 futures = { version = "0.3" }
 futures-util = "0.3.28"
+memmap2 = "0.6.1"

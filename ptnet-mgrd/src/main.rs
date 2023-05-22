@@ -1,4 +1,4 @@
-use std::{str::FromStr, fs};
+use std::{str::FromStr, fs, path::PathBuf};
 
 use futures::future::{try_join_all};
 use serde::{Serialize, Deserialize};
@@ -10,11 +10,12 @@ mod client_connection;
 mod database;
 mod ptnet_process;
 mod sol;
+mod fw_index;
 
 use client_connection::{ClientConnection};
 use database::{Database};
 
-use crate::{client_connection::{ClientConnectionDispatcher, ClientConnectionSender}, database::{node_address_to_string, node_table::NodeRecord}, ptnet_process::{NodeScanProcess, PersistProcess}};
+use crate::{client_connection::{ClientConnectionDispatcher, ClientConnectionSender}, database::{node_address_to_string, node_table::NodeRecord}, ptnet_process::{NodeScanProcess, PersistProcess}, fw_index::FirmwareIndex};
 
 #[derive(Parser,Debug)]
 #[command(author, version, about, long_about = None)]
@@ -38,7 +39,9 @@ pub struct Configuration {
     /// ptlink reconnect interval
     t_reconnect: u64,
     /// where to load initial node list from
-    node_model_source: NodeModelSource
+    node_model_source: NodeModelSource,
+    /// directory with firmwares
+    firmware_dir: PathBuf
 }
 
 impl Default for Configuration {
@@ -46,7 +49,8 @@ impl Default for Configuration {
         Configuration {
             server_address: "127.0.0.1:9885".to_string(),
             t_reconnect: 10,
-            node_model_source: NodeModelSource::SOL("/var/lib/kvds".to_string())
+            node_model_source: NodeModelSource::SOL("/var/lib/kvds".to_string()),
+            firmware_dir: PathBuf::from_str("/var/lib/ptnet/fw").unwrap()
         }
     }
 }
@@ -129,6 +133,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(conf_file) = args.config {
         conf = serde_json::from_reader(fs::File::open(conf_file)?)?;
     }
+
+    info!("Building firmware index");
+    let fw_index = FirmwareIndex::load_from(&conf.firmware_dir)?;
 
     info!("Loading ptnet-mgr database");
     let redb_db = redb::Database::create("ptnet-mgr.redb")?;
