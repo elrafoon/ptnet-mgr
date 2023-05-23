@@ -15,7 +15,7 @@ mod fw_index;
 use client_connection::{ClientConnection};
 use database::{Database};
 
-use crate::{client_connection::{ClientConnectionDispatcher, ClientConnectionSender}, database::{node_address_to_string, node_table::NodeRecord}, ptnet_process::{NodeScanProcess, PersistProcess}, fw_index::FirmwareIndex};
+use crate::{client_connection::{ClientConnectionDispatcher, ClientConnectionSender}, database::{node_table::NodeRecord, algo::TableOps}, ptnet_process::{NodeScanProcess, PersistProcess}, fw_index::FirmwareIndex};
 
 #[derive(Parser,Debug)]
 #[command(author, version, about, long_about = None)]

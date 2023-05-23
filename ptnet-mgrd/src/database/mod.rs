@@ -1,18 +1,45 @@
-use self::node_table::{NodeTable, NODE_TABLE};
+use serde::{Serialize, Deserialize};
+
+use self::{node_table::{NodeTable, NODE_TABLE}};
 
 pub mod node_table;
+pub mod algo;
 
-pub type NodeAddress = [u8; 6];
-type RawValue = [u8];
+pub type RawNodeAddress = [u8; 6];
 
-pub fn node_address_to_string(a: &NodeAddress) -> String {
-    format!("{:#02X}:{:#02X}:{:#02X}:{:#02X}:{:#02X}:{:#02X}",
-        a.get(0).unwrap(), a.get(1).unwrap(), a.get(2).unwrap(),
-        a.get(3).unwrap(), a.get(4).unwrap(), a.get(5).unwrap()
-    )
+#[derive(Serialize,Deserialize,Clone,Copy,Debug,Default,PartialEq)]
+pub struct NodeAddress {
+    raw: RawNodeAddress
 }
 
-const FWU_STATE_TABLE: redb::TableDefinition<&NodeAddress, &RawValue> = redb::TableDefinition::new("fwu_state");
+impl NodeAddress {
+    pub fn as_raw(&self) -> RawNodeAddress {
+        self.raw
+    }
+}
+
+impl From<[u8; 6]> for NodeAddress {
+    fn from(value: [u8; 6]) -> Self {
+        NodeAddress { raw: value }
+    }
+}
+
+impl Into<[u8; 6]> for NodeAddress {
+    fn into(self) -> [u8; 6] {
+        self.raw
+    }
+}
+
+impl ToString for NodeAddress {
+    fn to_string(&self) -> String {
+        let a = &self.raw;
+        format!("{:#02X}:{:#02X}:{:#02X}:{:#02X}:{:#02X}:{:#02X}",
+            a.get(0).unwrap(), a.get(1).unwrap(), a.get(2).unwrap(),
+            a.get(3).unwrap(), a.get(4).unwrap(), a.get(5).unwrap()
+        )
+    }
+}
+
 
 pub enum UpdateMode {
     UpdateOrCreate,
@@ -26,15 +53,14 @@ impl Default for UpdateMode {
 
 pub struct Database<'a> {
     pub(crate) inner_db: &'a redb::Database,
-    pub nodes: NodeTable<'a>
+    pub nodes: NodeTable<'a>,
 }
 
-impl<'a> Database<'a>
-{
+impl<'a> Database<'a> {
     pub fn new(re_db: &'a redb::Database) -> Self {
         Self {
             inner_db: re_db,
-            nodes: NodeTable::new(&re_db)
+            nodes: NodeTable::new(&re_db),
         }
     }
 

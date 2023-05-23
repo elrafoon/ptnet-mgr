@@ -64,7 +64,7 @@ impl<'a> NodeScanProcess<'a> {
                 port: PORT_AUTO,
                 header: ptnet::Header {
                     C: (BIT_PRM | FC_PRM_SEND_NOREPLY) as u8,
-                    address: node.address,
+                    address: node.address.into(),
                 },
                 payload: buf.into(),
             };
@@ -108,8 +108,8 @@ impl<'a> NodeScanProcess<'a> {
 
     fn match_rsp_ti232(rsp: &IOBMessage, node: &NodeRecord) -> bool {
         let IOBMessage { iob, message } = rsp;
-        if message.header.address == node.address {
-            if iob.asdh == ASDH::with(0x3E, COT::REQ, false) && iob.ioa == 1 {
+        if message.header.address == node.address.as_raw() {
+            if iob.asdh == ASDH::with(0x3E, COT::REQ, false) && iob.ioa == 0 {
                 if let IE::TI232(_) = iob.ie {
                     return true;
                 }

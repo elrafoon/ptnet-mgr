@@ -5,9 +5,9 @@ use redb::ReadableTable;
 use serde::{Serialize, Deserialize};
 use tokio::sync::broadcast;
 
-use super::{NodeAddress, RawValue, node_address_to_string, UpdateMode};
+use super::{UpdateMode, NodeAddress};
 
-pub(super) const NODE_TABLE: redb::TableDefinition<&NodeAddress, &RawValue> = redb::TableDefinition::new("nodes");
+pub(super) const NODE_TABLE: redb::TableDefinition<NodeAddress, NodeRecord> = redb::TableDefinition::new("nodes");
 
 #[derive(Debug,Serialize,Deserialize,Clone,Default,PartialEq)]
 pub struct NodeRecord {
@@ -18,7 +18,40 @@ pub struct NodeRecord {
 
 impl NodeRecord {
     pub fn mac(&self) -> String {
-        node_address_to_string(&self.address)
+        self.address.to_string()
+    }
+}
+
+impl redb::RedbValue for NodeRecord {
+    type SelfType<'a> = NodeRecord
+    where
+        Self: 'a;
+
+    type AsBytes<'a> = Vec<u8>
+    where
+        Self: 'a;
+
+    fn fixed_width() -> Option<usize> {
+        None
+    }
+
+    fn from_bytes<'a>(data: &'a [u8]) -> Self::SelfType<'a>
+    where
+        Self: 'a
+    {
+        serde_cbor::from_slice(data).unwrap()
+    }
+
+    fn as_bytes<'a, 'b: 'a>(value: &'a Self::SelfType<'b>) -> Self::AsBytes<'a>
+    where
+        Self: 'a,
+        Self: 'b
+    {
+        serde_cbor::to_vec(value).unwrap()
+    }
+
+    fn type_name() -> redb::TypeName {
+        redb::TypeName::new("NodeRecord")
     }
 }
 
@@ -29,7 +62,7 @@ pub enum Event {
 }
 
 pub struct NodeTable<'a> {
-    db: &'a redb::Database,
+    pub(crate) db: &'a redb::Database,
     pub events: broadcast::Sender<Event>
 }
 
@@ -69,14 +102,11 @@ impl<'a> NodeTable<'a> {
 
         for address in iter {
             match table.get(address)? {
-                Some(cbor) => {
-                    let rec: NodeRecord = serde_cbor::from_slice(cbor.value()).unwrap();
-                    results.push(rec);
-                },
+                Some(rec) => results.push(rec.value()),
                 None => {
                     return Err(Box::new(io::Error::new(
                         io::ErrorKind::NotFound,
-                        format!("Node {} does not exist", node_address_to_string(address))
+                        format!("Node {} does not exist", address.to_string())
                     )));
                 }
             }
@@ -97,13 +127,13 @@ impl<'a> NodeTable<'a> {
             let mut table = txn.open_table(NODE_TABLE)?;
             let rec: Option<NodeRecord> = match table.get(address)? {
                 None => None,
-                Some(cbor) => Some(serde_cbor::from_slice(cbor.value()).unwrap())
+                Some(rec) => Some(rec.value())
             };
 
             match cb(rec) {
                 None => return Ok(()),
                 Some(rec) => {
-                    match table.insert(address, serde_cbor::to_vec(&rec)?.as_slice())? {
+                    match table.insert(address, rec.clone())? {
                         None => event = Some(Event::NodeAdded(Arc::new(rec))),
                         Some(_) => event = Some(Event::NodeModified(Arc::new(rec)))
                     };
@@ -148,9 +178,7 @@ impl<'a> NodeTable<'a> {
                 UpdateMode::UpdateOrCreate => {}
             };
 
-            let rec_cbor = serde_cbor::to_vec(rec)?;
-            let rec_bytes = rec_cbor.as_slice();
-            prev_rec_exists = table.insert(address, rec_bytes)?.is_some();
+            prev_rec_exists = table.insert(address, rec)?.is_some();
         }
 
         txn.commit()?;
@@ -175,59 +203,6 @@ impl<'a> NodeTable<'a> {
         txn.commit()?;
         Ok(())
     }
-
-    pub fn update_many<'b,T>(&mut self, it: T, mode: UpdateMode) -> Result<(), Box<dyn std::error::Error>>
-    where
-        T: Iterator<Item = &'b NodeRecord> + Clone,
-    {
-        let mut events: Vec<Event> = Vec::new();
-        // let prev_rec_exists;
-
-        let txn = self.db.begin_write()?;
-        {
-            let mut table = txn.open_table(NODE_TABLE)?;
-
-            for rec in it {
-                match mode {
-                    UpdateMode::MustCreate => {
-                        if table.get(&rec.address)?.is_some() {
-                            return Err(Box::new(io::Error::new(
-                                io::ErrorKind::AlreadyExists,
-                                format!("Node {} already exists", rec.mac())
-                            )));
-                        }
-                    },
-                    UpdateMode::MustExist => {
-                        if table.get(&rec.address)?.is_none() {
-                            return Err(Box::new(io::Error::new(
-                                io::ErrorKind::NotFound,
-                                format!("Node {} does not exist", rec.mac())
-                            )));
-                        }
-                    },
-                    UpdateMode::UpdateOrCreate => {}
-                };
-
-                let rec_cbor = serde_cbor::to_vec(rec)?;
-                let rec_bytes = rec_cbor.as_slice();
-                let prev_rec = table.insert(&rec.address, rec_bytes)?;
-
-                events.push(
-                    match prev_rec {
-                        None => Event::NodeAdded(Arc::new(rec.clone())),
-                        Some(_) => Event::NodeModified(Arc::new(rec.clone()))
-                    }
-                );
-            }
-        }
-        txn.commit()?;
-
-        while let Some(evt) = events.pop() {
-            self.events.send(evt).unwrap_or_default();
-        }
-
-        Ok(())
-    }
 }
 
 #[cfg(test)]
@@ -248,7 +223,7 @@ mod tests {
         let mut rcvr = db.nodes.events.subscribe();
 
         let mut rec = NodeRecord {
-            address: [0xFE, 0xED, 0xDE, 0xAF, 0xBE, 0xEF],
+            address: NodeAddress::from([0xFE, 0xED, 0xDE, 0xAF, 0xBE, 0xEF]),
             device_status: Some(M_DEV_ST {
                 fw_state: 2,
                 fw_version: FW_Version_A {

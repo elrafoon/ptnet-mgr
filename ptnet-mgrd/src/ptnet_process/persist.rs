@@ -36,14 +36,14 @@ impl<'a> PtNetProcess for PersistProcess<'a> {
             if iob.asdh.ca == 0x3E {
                 match iob.ioa {
                     1 => if let IE::TI232(ti232) = iob.ie {
-                            self.db.nodes.modify(&msg.header.address, |opt_rec| {
+                            self.db.nodes.modify(&msg.header.address.into(), |opt_rec| {
                                 let mut rec = opt_rec.unwrap_or_default();
                                 rec.device_status = Some(ti232);
                                 Some(rec)
                             })?;
                         },
                     2 => if let IE::TI233(ti233) = iob.ie {
-                            self.db.nodes.modify(&msg.header.address, |opt_rec| {
+                            self.db.nodes.modify(&msg.header.address.into(), |opt_rec| {
                                 let mut rec = opt_rec.unwrap_or_default();
                                 rec.device_descriptor = Some(ti233);
                                 Some(rec)
